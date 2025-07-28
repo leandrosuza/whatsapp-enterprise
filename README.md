@@ -1,89 +1,119 @@
 # 📱 WhatsApp Enterprise
 
-> **Sistema Inteligente de Gerenciamento WhatsApp para Negócios**
+> **Intelligent WhatsApp Management System for Businesses**
 
-Uma plataforma web moderna que transforma o WhatsApp em uma ferramenta poderosa para negócios, oferecendo automação, inteligência artificial e interface administrativa completa.
+A modern web platform that transforms WhatsApp into a powerful business tool, offering automation, artificial intelligence, and a complete administrative interface.
 
-## 🚀 Sobre o Projeto
+## 🚀 About the Project
 
-O **WhatsApp Enterprise** é uma solução completa que combina:
-- **🔄 Automação Inteligente** com IA integrada
-- **📊 Gestão Avançada** de leads e conversas
-- **📨 Envio em Massa** com múltiplos números
-- **🎨 Interface Moderna** e totalmente responsiva
-- **🔒 Sistema de Autenticação** robusto e seguro
+**WhatsApp Enterprise** is a complete solution that combines:
+- **🔄 Intelligent Automation** with integrated AI
+- **📊 Advanced Management** of leads and conversations
+- **📨 Bulk Messaging** with multiple numbers
+- **🎨 Modern Interface** fully responsive
+- **🔒 Robust Authentication** system and secure
+- **🤖 WhatsApp Integration** with Web.js
+- **👥 WhatsApp Profile Management**
+- **📈 Analytics** and real-time reports
 
-## 🛠️ Tecnologias
+## 🛠️ Technologies
 
 - **Frontend:** Next.js 15, TypeScript, Tailwind CSS
 - **Backend:** Node.js, Express, TypeScript, SQLite
-- **Autenticação:** JWT, bcrypt
-- **Estilização:** Glass morphism, animações CSS, gradientes modernos
+- **WhatsApp:** whatsapp-web.js, Puppeteer
+- **Authentication:** JWT, bcrypt
+- **Styling:** Glass morphism, CSS animations, modern gradients
 
-## ⚡ Como Usar
+## ⚡ How to Use
 
-### 1. Instalação Rápida
+### 1. Quick Installation
 ```bash
-# Clone o repositório
-git clone https://github.com/seu-usuario/whatsapp-enterprise.git
+# Clone the repository
+git clone https://github.com/your-username/whatsapp-enterprise.git
 cd whatsapp-enterprise
 
-# Instale as dependências
+# Install dependencies
 npm install
 
-# Configure o ambiente
+# Configure environment
 cp backend/env.example backend/.env
 cp frontend/env.local.example frontend/.env.local
 
-# Crie o usuário admin
+# Create admin user
 cd backend && npm run create-admin
 
-# Inicie o projeto
+# Start the project
 npm run dev
 ```
 
-### 2. Acesse o Sistema
+### 2. Access the System
 - **URL:** `http://localhost:3000/admin/login`
 - **Email:** `admin@gmail.com`
-- **Senha:** `admin123`
+- **Password:** `admin123`
 
-## 🎯 Funcionalidades Principais
+## 🎯 Main Features
 
-- ✅ **Sistema de Autenticação** completo com JWT
-- ✅ **Interface Administrativa** moderna e responsiva
-- ✅ **Rotas Protegidas** com middleware de autorização
-- ✅ **Design System** com componentes reutilizáveis
-- ✅ **Animações Suaves** e efeitos visuais
-- ✅ **Mobile First** com navegação otimizada
+### ✅ Authentication System
+- Secure login with JWT
+- Role-based protection middleware
+- Rate limiting and CORS configured
+- Input validation on all routes
+
+### ✅ Administrative Interface
+- Modern and responsive design
+- Reusable components
+- Smooth animations and visual effects
+- Mobile First with optimized navigation
+
+### ✅ WhatsApp Integration
+- Connection with WhatsApp Web.js
+- Multiple profile management
+- QR Code for authentication
+- Real-time connection status
+- Scheduled message sending
+
+### ✅ Profile Management
+- WhatsApp profile creation and editing
+- Association with system users
+- Connection history
+- Custom settings
+
+### ✅ Analytics and Reports
+- Real-time metrics dashboard
+- Sent message reports
+- Performance statistics
+- Data export
 
 ## 📱 Screenshots
 
-### Tela de Login
-![Tela de Login](docs/adminLoginHome.png)
+### Login Screen
+![Login Screen](docs/adminLoginHome.png)
 
-### Dashboard Administrativo
+### Administrative Dashboard
 ![Dashboard](docs/adminHome.png)
 
-## 🔐 Segurança
+## 🔐 Security
 
-- Senhas hasheadas com bcrypt
-- JWT tokens com expiração
-- Rate limiting e CORS configurado
-- Validação de entrada em todas as rotas
-- Middleware de proteção por roles
+- Passwords hashed with bcrypt
+- JWT tokens with expiration
+- Rate limiting and CORS configured
+- Input validation on all routes
+- Role-based protection middleware
+- Secure WhatsApp sessions
 
-## 🚀 Próximos Passos
+## 🚀 Next Steps
 
-- Integração com WhatsApp Web.js
-- Sistema de automações com IA
-- Analytics e relatórios avançados
-- API REST completa
-- Integrações com CRMs
+- AI-powered automation system
+- Advanced analytics and reports
+- Complete REST API
+- CRM integrations
+- Intelligent chatbot
+- Automated marketing campaigns
 
-## 📄 Licença
+## 📄 License
 
-MIT License - veja o arquivo [LICENSE](LICENSE) para detalhes.
+MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-**Desenvolvido com ❤️ para revolucionar a comunicação empresarial** 
+**Developed with ❤️ to revolutionize business communication** 
