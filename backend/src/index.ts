@@ -16,6 +16,7 @@ import { logger } from './utils/logger';
 
 // Import models
 import { initializeAssociations } from './models';
+import sequelize from './models';
 
 // Import routes
 import authRoutes from './routes/auth';
@@ -116,6 +117,10 @@ async function startServer() {
     // Initialize model associations
     initializeAssociations();
     logger.info('✅ Model associations initialized');
+
+    // Sync models with database
+    await sequelize.sync({ force: false });
+    logger.info('✅ Database models synchronized');
 
 
 
