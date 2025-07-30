@@ -98,10 +98,21 @@ io.on('connection', (socket) => {
     logger.info(`User ${userId} joined room`);
   });
 
+  socket.on('join-whatsapp', (profileId: string) => {
+    socket.join(`whatsapp-${profileId}`);
+    logger.info(`Client joined WhatsApp room for profile ${profileId}`);
+  });
+
   socket.on('disconnect', () => {
     logger.info(`Client disconnected: ${socket.id}`);
   });
 });
+
+// Make io available globally for WhatsApp events
+declare global {
+  var io: any;
+}
+global.io = io;
 
 // Error handling
 app.use(notFound);

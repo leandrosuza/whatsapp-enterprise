@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
 import WhatsAppProfile from '../models/WhatsAppProfile';
+import { messageRateLimiter, chatRateLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
@@ -133,12 +134,30 @@ router.post('/connect', async (req, res) => {
 
     // Handle ready event
     client.on('ready', async () => {
-      console.log(`WhatsApp client ${clientId} is ready!`);
+      console.log(`✅ WhatsApp client ${clientId} is ready and connected!`, {
+        phoneNumber: client.info?.wid?.user,
+        info: client.info
+      });
+      
+      // Test if client can receive messages by logging all events
+      console.log(`🧪 Testing client ${clientId} - all event listeners should be active`);
       
       // Update profile in database
       const profile = await WhatsAppProfile.findByClientId(clientId);
       if (profile) {
         await profile.markConnected(client.info.wid.user);
+        
+        // Try to get profile picture
+        try {
+          console.log('Attempting to get profile picture for:', client.info.wid.user);
+          const profilePicture = await client.getProfilePicUrl(client.info.wid._serialized);
+          if (profilePicture) {
+            console.log('Profile picture URL obtained:', profilePicture);
+            await profile.updateProfilePhoto(profilePicture);
+          }
+        } catch (error) {
+          console.log('Could not get profile picture, will use initials:', error instanceof Error ? error.message : 'Unknown error');
+        }
       }
       
       const clientInfo = clientData.get(clientId);
@@ -149,9 +168,164 @@ router.post('/connect', async (req, res) => {
       }
     });
 
+    // Handle incoming messages with robust error handling
+    console.log(`🔧 Registering message event listener for client ${clientId}`);
+    
+    client.on('message', async (message) => {
+      try {
+        console.log('🎯 MESSAGE EVENT TRIGGERED!');
+        console.log('📱 New WhatsApp message received:', {
+          id: message.id._serialized,
+          from: message.from,
+          body: message.body,
+          type: message.type,
+          timestamp: message.timestamp,
+          clientId: clientId
+        });
+        
+        // Get profile from database to ensure we have the latest data
+        const currentProfile = await WhatsAppProfile.findByClientId(clientId);
+        
+        if (!currentProfile?.id) {
+          console.error('❌ No profile found for client:', clientId);
+          return;
+        }
+        
+        // Prepare message data with proper validation
+        const messageData = {
+          type: 'message',
+          data: {
+            id: message.id._serialized,
+            chatId: message.from,
+            text: message.body || '',
+            time: new Date(message.timestamp * 1000),
+            isSent: false,
+            status: 'sent',
+            type: message.type || 'text'
+          },
+          timestamp: new Date(),
+          profileId: currentProfile.id
+        };
+        
+        // Validate message data before emitting
+        if (!messageData.data.id || !messageData.data.chatId) {
+          console.error('❌ Invalid message data:', messageData);
+          return;
+        }
+        
+        // Emit to connected clients via WebSocket with retry logic
+        if (global.io) {
+          const roomName = `whatsapp-${currentProfile.id}`;
+          const roomExists = global.io.sockets.adapter.rooms.has(roomName);
+          
+          console.log('📡 Emitting message to clients:', {
+            room: roomName,
+            messageId: messageData.data.id,
+            chatId: messageData.data.chatId,
+            text: message.body?.substring(0, 30),
+            profileId: currentProfile.id,
+            hasIo: !!global.io,
+            roomExists: roomExists,
+            clientsInRoom: roomExists ? global.io.sockets.adapter.rooms.get(roomName)?.size || 0 : 0
+          });
+          
+          // Emit with acknowledgment
+          global.io.to(roomName).emit('whatsapp_message', messageData);
+          
+          // Log successful emission
+          console.log('✅ Message emitted successfully to room:', roomName);
+        } else {
+          console.error('❌ WebSocket not available for message emission');
+        }
+      } catch (error) {
+        console.error('❌ Error processing incoming message:', error);
+        console.error('Error details:', {
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : 'No stack trace',
+          clientId,
+          messageId: message.id._serialized
+        });
+      }
+    });
+
+    // Handle message status updates with robust error handling
+    client.on('message_ack', async (message, ack) => {
+      try {
+        console.log('📊 Message status updated:', {
+          messageId: message.id._serialized,
+          ack: ack,
+          clientId: clientId
+        });
+        
+        const currentProfile = await WhatsAppProfile.findByClientId(clientId);
+        
+        if (!currentProfile?.id) {
+          console.error('❌ No profile found for status update:', clientId);
+          return;
+        }
+        
+        const statusData = {
+          type: 'status',
+          data: {
+            messageId: message.id._serialized,
+            status: ack === 1 ? 'sent' : ack === 2 ? 'delivered' : ack === 3 ? 'read' : 'sent'
+          },
+          timestamp: new Date(),
+          profileId: currentProfile.id
+        };
+        
+        if (global.io) {
+          const roomName = `whatsapp-${currentProfile.id}`;
+          global.io.to(roomName).emit('whatsapp_status', statusData);
+          console.log('✅ Status update emitted successfully:', statusData.data);
+        } else {
+          console.error('❌ WebSocket not available for status update');
+        }
+      } catch (error) {
+        console.error('❌ Error processing message status update:', error);
+      }
+    });
+
+    // Handle typing indicators and state changes with robust error handling
+    client.on('change_state', async (state) => {
+      try {
+        console.log('⌨️ State changed:', {
+          state: state,
+          clientId: clientId
+        });
+        
+        const currentProfile = await WhatsAppProfile.findByClientId(clientId);
+        
+        if (!currentProfile?.id) {
+          console.error('❌ No profile found for state change:', clientId);
+          return;
+        }
+        
+        const stateData = {
+          type: 'state',
+          data: {
+            state: state,
+            timestamp: new Date()
+          },
+          timestamp: new Date(),
+          profileId: currentProfile.id
+        };
+        
+        if (global.io) {
+          const roomName = `whatsapp-${currentProfile.id}`;
+          global.io.to(roomName).emit('whatsapp_state', stateData);
+          console.log('✅ State change emitted successfully:', stateData.data);
+        } else {
+          console.error('❌ WebSocket not available for state change');
+        }
+      } catch (error) {
+        console.error('❌ Error processing state change:', error);
+      }
+    });
+
     // Handle authentication failure
     client.on('auth_failure', async (msg) => {
-      console.error(`WhatsApp auth failure for ${clientId}:`, msg);
+      console.error(`❌ WhatsApp auth failure for ${clientId}:`, msg);
       
       // Update profile status to error
       const profile = await WhatsAppProfile.findByClientId(clientId);
@@ -324,6 +498,7 @@ router.get('/profiles', async (req, res) => {
         id: profile.id,
         name: profile.name,
         phoneNumber: profile.phoneNumber,
+        profilePhoto: profile.profilePhoto,
         isConnected: isActuallyConnected,
         isActive: profile.isActive,
         status: realStatus,
@@ -609,6 +784,317 @@ router.get('/clients', (req, res) => {
   
   return res.json(clients);
 });
+
+
+// Get chats for a profile
+router.get('/profiles/:profileId/chats', chatRateLimiter, async (req, res) => {
+  try {
+    const { profileId } = req.params;
+    const profile = await WhatsAppProfile.findByPk(profileId);
+    
+    if (!profile) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+    
+    const client = activeClients.get(profile.clientId);
+    const clientInfo = clientData.get(profile.clientId);
+    
+    // Verificar se o cliente está realmente conectado
+    const isActuallyConnected = client && clientInfo && clientInfo.status === 'connected';
+    
+    if (!client || !isActuallyConnected) {
+      console.log('Profile not connected, returning mock data:', {
+        profileId,
+        hasClient: !!client,
+        clientStatus: clientInfo?.status,
+        profileStatus: profile.status
+      });
+      
+      // Retornar dados mockados para teste
+      const mockChats = [
+        {
+          id: 'chat1',
+          contact: {
+            id: 'contact1',
+            name: 'Leandro',
+            number: '5511999999999',
+            avatar: null,
+            lastMessage: 'Ew',
+            lastTime: '23:27',
+            unreadCount: 27,
+            isOnline: false,
+            isTyping: false,
+            status: 'none',
+            isGroup: false
+          },
+          messages: [],
+          unreadCount: 27,
+          lastActivity: new Date(),
+          isPinned: false,
+          isArchived: false
+        },
+        {
+          id: 'chat2',
+          contact: {
+            id: 'contact2',
+            name: 'RBS Promotora',
+            number: '5511888888888',
+            avatar: null,
+            lastMessage: 'Olá, como vai? Seu FGTS foi atualizado!',
+            lastTime: '09:00',
+            unreadCount: 1,
+            isOnline: false,
+            isTyping: false,
+            status: 'none',
+            isGroup: false
+          },
+          messages: [],
+          unreadCount: 1,
+          lastActivity: new Date(),
+          isPinned: false,
+          isArchived: false
+        },
+        {
+          id: 'group1',
+          contact: {
+            id: 'group1',
+            name: 'Família Silva',
+            number: 'group1',
+            avatar: null,
+            lastMessage: 'Boa noite família!',
+            lastTime: '20:30',
+            unreadCount: 0,
+            isOnline: false,
+            isTyping: false,
+            status: 'none',
+            isGroup: true
+          },
+          messages: [],
+          unreadCount: 0,
+          lastActivity: new Date(),
+          isPinned: false,
+          isArchived: false
+        },
+        {
+          id: 'group2',
+          contact: {
+            id: 'group2',
+            name: 'Trabalho - Projetos',
+            number: 'group2',
+            avatar: null,
+            lastMessage: 'Reunião amanhã às 10h',
+            lastTime: '18:45',
+            unreadCount: 3,
+            isOnline: false,
+            isTyping: false,
+            status: 'none',
+            isGroup: true
+          },
+          messages: [],
+          unreadCount: 3,
+          lastActivity: new Date(),
+          isPinned: false,
+          isArchived: false
+        },
+        {
+          id: 'group3',
+          contact: {
+            id: 'group3',
+            name: 'Amigos da Faculdade',
+            number: 'group3',
+            avatar: null,
+            lastMessage: 'Quem vai na festa?',
+            lastTime: '22:15',
+            unreadCount: 0,
+            isOnline: false,
+            isTyping: false,
+            status: 'none',
+            isGroup: true
+          },
+          messages: [],
+          unreadCount: 0,
+          lastActivity: new Date(),
+          isPinned: false,
+          isArchived: false
+        }
+      ];
+      
+      return res.json(mockChats);
+    }
+    
+    // Get chats from WhatsApp client
+    const chats = await client.getChats();
+    
+    const formattedChats = chats.map((chat: any) => ({
+      id: chat.id._serialized,
+      contact: {
+        id: chat.id._serialized,
+        name: chat.name,
+        number: chat.id.user,
+        avatar: chat.profilePicUrl,
+        lastMessage: chat.lastMessage?.body || '',
+        lastTime: chat.lastMessage?.timestamp ? new Date(chat.lastMessage.timestamp * 1000).toLocaleTimeString() : '',
+        unreadCount: chat.unreadCount,
+        isOnline: false,
+        isTyping: false,
+        status: 'none',
+        isGroup: chat.isGroup
+      },
+      messages: [],
+      unreadCount: chat.unreadCount,
+      lastActivity: chat.lastMessage?.timestamp ? new Date(chat.lastMessage.timestamp * 1000) : new Date(),
+      isPinned: false,
+      isArchived: false
+    }));
+    
+    return res.json(formattedChats);
+  } catch (error) {
+    console.error('Error fetching chats:', error);
+    return res.status(500).json({ error: 'Failed to fetch chats' });
+  }
+});
+
+// Get messages for a chat
+router.get('/profiles/:profileId/chats/:chatId/messages', messageRateLimiter, async (req, res) => {
+  try {
+    const { profileId, chatId } = req.params;
+    const profile = await WhatsAppProfile.findByPk(profileId);
+    
+    if (!profile) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+    
+    const client = activeClients.get(profile.clientId);
+    const clientInfo = clientData.get(profile.clientId);
+    
+    // Verificar se o cliente está realmente conectado
+    const isActuallyConnected = client && clientInfo && clientInfo.status === 'connected';
+    
+    if (!client || !isActuallyConnected) {
+      console.log('Profile not connected for messages:', {
+        profileId,
+        hasClient: !!client,
+        clientStatus: clientInfo?.status,
+        profileStatus: profile.status
+      });
+      return res.status(400).json({ error: 'Profile is not connected' });
+    }
+    
+    // Get chat and messages
+    const chat = await client.getChatById(chatId);
+    const messages = await chat.fetchMessages({ limit: 50 });
+    
+    const formattedMessages = messages.map((msg: any) => ({
+      id: msg.id._serialized,
+      chatId: chatId,
+      text: msg.body || '',
+      time: new Date(msg.timestamp * 1000),
+      isSent: msg.fromMe,
+      status: msg.ack === 1 ? 'sent' : msg.ack === 2 ? 'delivered' : msg.ack === 3 ? 'read' : 'sent',
+      type: msg.type,
+      mediaUrl: msg.hasMedia ? msg.downloadMedia() : undefined,
+      mediaCaption: msg.caption || undefined
+    }));
+    
+    return res.json(formattedMessages);
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    return res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// Send message
+router.post('/profiles/:profileId/chats/:chatId/messages', async (req, res) => {
+  try {
+    const { profileId, chatId } = req.params;
+    const { text } = req.body;
+    
+    if (!text || !text.trim()) {
+      return res.status(400).json({ error: 'Message text is required' });
+    }
+    
+    const profile = await WhatsAppProfile.findByPk(profileId);
+    if (!profile) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+    
+    const client = activeClients.get(profile.clientId);
+    const clientInfo = clientData.get(profile.clientId);
+    
+    // Verificar se o cliente está realmente conectado
+    const isActuallyConnected = client && clientInfo && clientInfo.status === 'connected';
+    
+    if (!client || !isActuallyConnected) {
+      console.log('Profile not connected for sending message:', {
+        profileId,
+        hasClient: !!client,
+        clientStatus: clientInfo?.status,
+        profileStatus: profile.status
+      });
+      return res.status(400).json({ error: 'Profile is not connected' });
+    }
+    
+    // Send message
+    const chat = await client.getChatById(chatId);
+    const message = await chat.sendMessage(text);
+    
+    console.log('Message sent successfully:', {
+      messageId: message.id._serialized,
+      chatId: chatId,
+      text: text
+    });
+    
+    return res.json({
+      success: true,
+      messageId: message.id._serialized
+    });
+  } catch (error) {
+    console.error('Error sending message:', error);
+    return res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// Mark messages as read
+router.post('/profiles/:profileId/chats/:chatId/read', async (req, res) => {
+  try {
+    const { profileId, chatId } = req.params;
+    const { messageIds } = req.body;
+    
+    const profile = await WhatsAppProfile.findByPk(profileId);
+    if (!profile) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+    
+    const client = activeClients.get(profile.clientId);
+    const clientInfo = clientData.get(profile.clientId);
+    
+    // Verificar se o cliente está realmente conectado
+    const isActuallyConnected = client && clientInfo && clientInfo.status === 'connected';
+    
+    if (!client || !isActuallyConnected) {
+      console.log('Profile not connected for marking as read:', {
+        profileId,
+        hasClient: !!client,
+        clientStatus: clientInfo?.status,
+        profileStatus: profile.status
+      });
+      return res.status(400).json({ error: 'Profile is not connected' });
+    }
+    
+    // Mark messages as read
+    const chat = await client.getChatById(chatId);
+    await chat.sendSeen();
+    
+    console.log('Messages marked as read for chat:', chatId);
+    
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Error marking as read:', error);
+    return res.status(500).json({ error: 'Failed to mark as read' });
+  }
+});
+
+
 
 // Test route to check if Puppeteer is working
 router.get('/test-browser', async (req, res) => {

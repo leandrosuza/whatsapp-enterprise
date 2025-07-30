@@ -8,6 +8,7 @@ interface WhatsAppProfileAttributes {
   clientId: string;
   sessionPath: string;
   phoneNumber?: string;
+  profilePhoto?: string;
   isConnected: boolean;
   isActive: boolean;
   lastConnected?: Date;
@@ -27,6 +28,7 @@ class WhatsAppProfile extends Model<WhatsAppProfileAttributes, WhatsAppProfileCr
   public clientId!: string;
   public sessionPath!: string;
   public phoneNumber?: string;
+  public profilePhoto?: string;
   public isConnected!: boolean;
   public isActive!: boolean;
   public lastConnected?: Date;
@@ -88,6 +90,12 @@ class WhatsAppProfile extends Model<WhatsAppProfileAttributes, WhatsAppProfileCr
     }
     await this.save();
   }
+
+  // Instance method to update profile photo
+  public async updateProfilePhoto(photoUrl: string): Promise<void> {
+    this.profilePhoto = photoUrl;
+    await this.save();
+  }
 }
 
 WhatsAppProfile.init(
@@ -130,6 +138,11 @@ WhatsAppProfile.init(
     phoneNumber: {
       type: DataTypes.STRING,
       allowNull: true,
+    },
+    profilePhoto: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      field: 'profilePhoto', // Explicitly set the field name to match the database column
     },
     isConnected: {
       type: DataTypes.BOOLEAN,
