@@ -225,9 +225,8 @@ npm run dev
 
 **Current Status:** Active development
 
-- **Email:** leandrosuza.dev@gmail.com
+- **Email:** leandrodsl2004@gmail.com
 - **GitHub Issues:** [Report Bug](https://github.com/leandrosuza/whatsapp-enterprise/issues)
-- **WhatsApp:** +55 (11) 99999-9999
 
 ### 🤝 Contributing
 
