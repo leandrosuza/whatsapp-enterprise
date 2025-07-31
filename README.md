@@ -6,7 +6,7 @@
 
 A modern web platform that transforms WhatsApp into a powerful business tool, offering automation, artificial intelligence, and a complete administrative interface.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Custom](https://img.shields.io/badge/License-Custom-red.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue.svg)](https://www.typescriptlang.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black.svg)](https://nextjs.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18-green.svg)](https://nodejs.org/)
@@ -243,7 +243,9 @@ npm run dev
 
 ## 📄 License
 
-MIT License - see the [LICENSE](LICENSE) file for details.
+Custom License - see the [LICENSE](LICENSE) file for details.
+
+**⚠️ Important:** This project is open source for educational and non-commercial use. Commercial use requires explicit written permission from the author. See LICENSE file for full terms and conditions.
 
 ---
 

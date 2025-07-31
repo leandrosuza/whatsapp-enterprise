@@ -1,21 +1,69 @@
-MIT License
+CUSTOM LICENSE - WhatsApp Enterprise
 
-Copyright (c) 2024 WhatsApp Enterprise
+Copyright (c) 2024 Leandro Souza (leandrosuza.dev@gmail.com)
+All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This software and associated documentation files (the "Software") are the exclusive 
+property of Leandro Souza. The Software is provided as open source for educational 
+and non-commercial use, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+PERMITTED USES:
+✅ Use, copy, modify, merge, and distribute the Software for:
+   - Personal/educational purposes
+   - Non-commercial projects
+   - Internal business use (without resale)
+   - Contributing to the open source community
 
+RESTRICTIONS:
+❌ COMMERCIAL SALE PROHIBITED:
+   - You MAY NOT sell, resell, or commercially distribute this Software
+   - You MAY NOT include this Software in any commercial product for sale
+   - You MAY NOT charge money for access to this Software
+   - You MAY NOT use this Software to generate revenue without explicit written permission
+
+❌ CREDIT REQUIREMENT:
+   - You MUST include the original copyright notice in all copies
+   - You MUST prominently display: "Powered by WhatsApp Enterprise by Leandro Souza"
+   - You MUST include a link to: https://github.com/leandrosuza/whatsapp-enterprise
+   - You MUST maintain all attribution and credit notices
+
+❌ NO DERIVATIVE SALES:
+   - You MAY NOT sell modified versions without permission
+   - You MAY NOT create commercial derivatives
+   - You MAY NOT redistribute for profit
+
+COMMERCIAL USE EXCEPTIONS:
+🔄 COMMERCIAL USE IS ALLOWED ONLY WITH EXPLICIT WRITTEN PERMISSION:
+   - Contact: leandrosuza.dev@gmail.com
+   - Include detailed business plan and use case
+   - Commercial licensing available for approved cases
+   - Revenue sharing may be required
+
+LEGAL ENFORCEMENT:
+⚖️ VIOLATION CONSEQUENCES:
+   - Immediate legal action for unauthorized commercial use
+   - Cease and desist orders
+   - Potential lawsuits for copyright infringement
+   - Damages and legal fees recovery
+   - Repository takedown requests
+   - DMCA notices for online violations
+
+DISCLAIMER:
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE. 
+SOFTWARE.
+
+CONTACT INFORMATION:
+- Developer: Leandro Souza
+- Email: leandrosuza.dev@gmail.com
+- GitHub: https://github.com/leandrosuza/whatsapp-enterprise
+- Commercial Licensing: Contact via email for approval
+
+This license is legally binding and enforceable. Violations will be pursued through 
+appropriate legal channels to protect the intellectual property rights of the author.
+
+Last updated: December 2024 
