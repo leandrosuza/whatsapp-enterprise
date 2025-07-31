@@ -126,7 +126,7 @@ A modern web platform that transforms WhatsApp into a powerful business tool, of
 - **Sequelize** - ORM
 
 ### WhatsApp Integration
-- **whatsapp-web.js** - Official WhatsApp library
+- **whatsapp-web.js** -  WhatsApp-web.js library
 - **Puppeteer** - Browser automation
 
 ### Authentication & Security
