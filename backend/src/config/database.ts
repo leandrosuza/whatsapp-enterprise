@@ -1,6 +1,6 @@
 import { Sequelize } from 'sequelize';
-import path from 'path';
-import fs from 'fs';
+import * as path from 'path';
+import * as fs from 'fs';
 
 const DB_PATH = process.env.DB_PATH || './database/whatsapp_enterprise.sqlite';
 const DB_SYNC = process.env.DB_SYNC === 'true';

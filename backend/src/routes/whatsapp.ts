@@ -1,25 +1,36 @@
 import { Router } from 'express';
 import { Client, LocalAuth } from 'whatsapp-web.js';
-import qrcode from 'qrcode';
+import * as qrcode from 'qrcode';
 import { v4 as uuidv4 } from 'uuid';
-import path from 'path';
-import fs from 'fs';
+import * as path from 'path';
+import * as fs from 'fs';
 import WhatsAppProfile from '../models/WhatsAppProfile';
-import { messageRateLimiter, chatRateLimiter } from '../middleware/rateLimiter';
+import { messageRateLimiter, chatRateLimiter, syncRateLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
-// Store active WhatsApp clients
-const activeClients = new Map<string, any>();
+// Use global maps for active WhatsApp clients
+declare global {
+  var activeClients: Map<string, any>;
+  var clientData: Map<string, {
+    profileName: string;
+    phoneNumber?: string;
+    status: 'connecting' | 'connected' | 'disconnected' | 'error' | 'qr_ready';
+    qrCode?: string;
+    profileId?: number;
+  }>;
+}
 
-// Store client data
-const clientData = new Map<string, {
-  profileName: string;
-  phoneNumber?: string;
-  status: 'connecting' | 'connected' | 'disconnected' | 'error' | 'qr_ready';
-  qrCode?: string;
-  profileId?: number;
-}>();
+// Initialize global maps if they don't exist
+if (!global.activeClients) {
+  global.activeClients = new Map();
+}
+if (!global.clientData) {
+  global.clientData = new Map();
+}
+
+const activeClients = global.activeClients;
+const clientData = global.clientData;
 
 // Ensure sessions directory exists
 const sessionsDir = path.join(__dirname, '../../sessions');
@@ -48,7 +59,7 @@ router.post('/connect', async (req, res) => {
     console.log('Sessions directory:', sessionsDir);
     console.log('Sessions directory exists:', fs.existsSync(sessionsDir));
     
-    // Create profile in database first
+    // Create profile in database first with default status
     console.log('About to create profile in database...');
     let profile;
     try {
@@ -56,8 +67,8 @@ router.post('/connect', async (req, res) => {
         userId,
         name: profileName,
         clientId,
-        sessionPath,
-        status: 'connecting'
+        sessionPath
+        // status will default to 'disconnected' as defined in the model
       });
 
       console.log('Profile created in database:', profile.id);
@@ -66,13 +77,24 @@ router.post('/connect', async (req, res) => {
       return res.status(500).json({ error: 'Failed to create profile in database', details: error instanceof Error ? error.message : 'Unknown error' });
     }
 
-    // Store client data
+    // Store client data with initial status
     console.log('Storing client data...');
     clientData.set(clientId, {
       profileName,
-      status: 'connecting',
+      status: 'disconnected',
       profileId: profile.id
     });
+
+    // Update profile status to connecting before initializing client
+    console.log('Updating profile status to connecting...');
+    await profile.update({ status: 'connecting' });
+    
+    // Update client data status
+    const clientInfo = clientData.get(clientId);
+    if (clientInfo) {
+      clientInfo.status = 'connecting';
+      clientData.set(clientId, clientInfo);
+    }
 
     // Create WhatsApp client
     console.log('Creating WhatsApp client with minimal config...');
@@ -173,15 +195,8 @@ router.post('/connect', async (req, res) => {
     
     client.on('message', async (message) => {
       try {
-        console.log('🎯 MESSAGE EVENT TRIGGERED!');
-        console.log('📱 New WhatsApp message received:', {
-          id: message.id._serialized,
-          from: message.from,
-          body: message.body,
-          type: message.type,
-          timestamp: message.timestamp,
-          clientId: clientId
-        });
+        // Log reduzido para melhor performance
+        console.log('📨 Message received:', message.body?.substring(0, 30));
         
         // Get profile from database to ensure we have the latest data
         const currentProfile = await WhatsAppProfile.findByClientId(clientId);
@@ -191,7 +206,7 @@ router.post('/connect', async (req, res) => {
           return;
         }
         
-        // Prepare message data with proper validation
+        // Prepare message data with proper validation and preview info
         const messageData = {
           type: 'message',
           data: {
@@ -199,9 +214,22 @@ router.post('/connect', async (req, res) => {
             chatId: message.from,
             text: message.body || '',
             time: new Date(message.timestamp * 1000),
-            isSent: false,
+            isSent: message.fromMe || false,
             status: 'sent',
-            type: message.type || 'text'
+            type: message.type || 'text',
+            // Adicionar informações extras para melhor processamento
+            isGroup: message.from.includes('@g.us'),
+            sender: message.fromMe ? currentProfile.phoneNumber : message.from,
+            mediaUrl: message.hasMedia ? await message.downloadMedia().then(media => media.data) : undefined,
+            // Informações de preview para otimização
+            preview: message.body ? message.body.substring(0, 50) + (message.body.length > 50 ? '...' : '') : '',
+            timestamp: message.timestamp * 1000,
+            // Informações do chat para atualização da lista
+            chatInfo: {
+              lastMessage: message.body || '',
+              lastMessageTime: new Date(message.timestamp * 1000),
+              unreadCount: message.fromMe ? 0 : 1 // Incrementar apenas se não for nossa mensagem
+            }
           },
           timestamp: new Date(),
           profileId: currentProfile.id
@@ -213,27 +241,12 @@ router.post('/connect', async (req, res) => {
           return;
         }
         
-        // Emit to connected clients via WebSocket with retry logic
+        // Emit to connected clients via WebSocket - OTIMIZADO
         if (global.io) {
           const roomName = `whatsapp-${currentProfile.id}`;
-          const roomExists = global.io.sockets.adapter.rooms.has(roomName);
           
-          console.log('📡 Emitting message to clients:', {
-            room: roomName,
-            messageId: messageData.data.id,
-            chatId: messageData.data.chatId,
-            text: message.body?.substring(0, 30),
-            profileId: currentProfile.id,
-            hasIo: !!global.io,
-            roomExists: roomExists,
-            clientsInRoom: roomExists ? global.io.sockets.adapter.rooms.get(roomName)?.size || 0 : 0
-          });
-          
-          // Emit with acknowledgment
+          // Emit immediately without excessive logging
           global.io.to(roomName).emit('whatsapp_message', messageData);
-          
-          // Log successful emission
-          console.log('✅ Message emitted successfully to room:', roomName);
         } else {
           console.error('❌ WebSocket not available for message emission');
         }
@@ -254,7 +267,8 @@ router.post('/connect', async (req, res) => {
         console.log('📊 Message status updated:', {
           messageId: message.id._serialized,
           ack: ack,
-          clientId: clientId
+          clientId: clientId,
+          status: ack === 1 ? 'sent' : ack === 2 ? 'delivered' : ack === 3 ? 'read' : 'pending'
         });
         
         const currentProfile = await WhatsAppProfile.findByClientId(clientId);
@@ -268,7 +282,10 @@ router.post('/connect', async (req, res) => {
           type: 'status',
           data: {
             messageId: message.id._serialized,
-            status: ack === 1 ? 'sent' : ack === 2 ? 'delivered' : ack === 3 ? 'read' : 'sent'
+            chatId: message.from,
+            status: ack === 1 ? 'sent' : ack === 2 ? 'delivered' : ack === 3 ? 'read' : 'pending',
+            ack: ack,
+            timestamp: new Date()
           },
           timestamp: new Date(),
           profileId: currentProfile.id
@@ -407,6 +424,51 @@ router.post('/connect', async (req, res) => {
   }
 });
 
+// Get client status
+router.get('/client/:clientId/status', async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    console.log('🔍 Status request for client:', clientId);
+    
+    const client = activeClients.get(clientId);
+    const clientInfo = clientData.get(clientId);
+    const profile = await WhatsAppProfile.findByClientId(clientId);
+    
+    let isActuallyConnected = false;
+    let clientState = 'unknown';
+    
+    if (client) {
+      try {
+        clientState = await client.getState();
+        isActuallyConnected = clientState === 'CONNECTED';
+        console.log('✅ Client state:', clientState, 'Connected:', isActuallyConnected);
+      } catch (error) {
+        console.log('❌ Error getting client state:', error instanceof Error ? error.message : 'Unknown error');
+        isActuallyConnected = false;
+      }
+    }
+    
+    return res.json({
+      clientId,
+      hasClient: !!client,
+      clientInfo: clientInfo || null,
+      profile: profile ? {
+        id: profile.id,
+        name: profile.name,
+        status: profile.status,
+        isConnected: profile.isConnected
+      } : null,
+      isActuallyConnected,
+      clientState,
+      activeClientsCount: activeClients.size,
+      clientDataCount: clientData.size
+    });
+  } catch (error) {
+    console.error('Error getting client status:', error);
+    return res.status(500).json({ error: 'Failed to get client status' });
+  }
+});
+
 // Get QR code for a client
 router.get('/qr/:clientId', (req, res) => {
   const { clientId } = req.params;
@@ -454,65 +516,393 @@ router.get('/qr/:clientId', (req, res) => {
   });
 });
 
-// Get all profiles with real-time status
+// Test endpoint
+router.get('/test', (req, res) => {
+  console.log('🧪 Test endpoint called');
+  res.json({ 
+    message: 'WhatsApp API is working',
+    timestamp: new Date().toISOString(),
+    activeClients: activeClients.size,
+    clientData: clientData.size
+  });
+});
+
+// Check and reconnect client
+router.post('/profiles/:profileId/reconnect', async (req, res) => {
+  try {
+    const { profileId } = req.params;
+    console.log('🔄 Reconnect request for profile:', profileId);
+    
+    const profile = await WhatsAppProfile.findByPk(profileId);
+    if (!profile) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+    
+    console.log('✅ Profile found:', {
+      id: profile.id,
+      clientId: profile.clientId,
+      status: profile.status
+    });
+    
+    const client = activeClients.get(profile.clientId);
+    const clientInfo = clientData.get(profile.clientId);
+    
+    console.log('🔍 Current client status:', {
+      hasClient: !!client,
+      clientStatus: clientInfo?.status,
+      activeClientsCount: activeClients.size,
+      clientDataCount: clientData.size
+    });
+    
+    // Test if client is actually connected
+    let isActuallyConnected = false;
+    
+    if (client && clientInfo) {
+      try {
+        // Test if client is really connected by trying to get basic info
+        if (client.info && client.info.wid) {
+          isActuallyConnected = true;
+          console.log('✅ Client is actually connected - info available');
+        } else {
+          console.log('⚠️ Client exists but no info available - testing connection...');
+          // Try to get client state to test connection
+          try {
+            await client.getState();
+            isActuallyConnected = true;
+            console.log('✅ Client connection test successful');
+          } catch (testError) {
+            console.log('❌ Client connection test failed:', testError instanceof Error ? testError.message : 'Unknown error');
+            isActuallyConnected = false;
+          }
+        }
+      } catch (error) {
+        console.log('❌ Error testing client connection:', error instanceof Error ? error.message : 'Unknown error');
+        isActuallyConnected = false;
+      }
+    }
+    
+    console.log('🔍 Connection test result:', {
+      hasClient: !!client,
+      clientStatus: clientInfo?.status,
+      isActuallyConnected
+    });
+    
+    // If client exists but is not actually connected, try to reconnect
+    if (client && clientInfo && !isActuallyConnected) {
+      console.log('🔄 Attempting to reconnect client...');
+      
+      try {
+        await client.initialize();
+        console.log('✅ Client reconnected successfully');
+        
+        // Update client data
+        clientData.set(profile.clientId, {
+          ...clientInfo,
+          status: 'connected'
+        });
+        
+        // Update profile status
+        await profile.update({ status: 'connected' });
+        
+        return res.json({ 
+          success: true, 
+          message: 'Client reconnected successfully',
+          status: 'connected'
+        });
+      } catch (error) {
+        console.error('❌ Failed to reconnect client:', error);
+        
+        // Update profile status to disconnected
+        await profile.update({ 
+          status: 'disconnected',
+          isConnected: false,
+          lastDisconnected: new Date()
+        });
+        
+        return res.status(500).json({ 
+          error: 'Failed to reconnect client',
+          details: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
+    
+    // If no client exists, return error
+    if (!client) {
+      return res.status(400).json({ 
+        error: 'No client found for this profile',
+        suggestion: 'Try connecting the profile first'
+      });
+    }
+    
+    // If client is actually connected, return success
+    if (isActuallyConnected) {
+      return res.json({ 
+        success: true, 
+        message: 'Client is already connected',
+        status: 'connected'
+      });
+    }
+    
+    // If we get here, something is wrong
+    return res.status(400).json({ 
+      error: 'Client exists but connection test failed',
+      status: 'disconnected'
+    });
+    
+  } catch (error) {
+    console.error('❌ Error in reconnect endpoint:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// List all profiles
 router.get('/profiles', async (req, res) => {
   try {
-    console.log('Fetching WhatsApp profiles...');
-    const profiles = await WhatsAppProfile.findActive();
-    console.log('Found profiles:', profiles.length);
+    console.log('📋 GET /profiles - Listing all profiles');
+    const profiles = await WhatsAppProfile.findAll();
+    console.log('✅ Profiles found:', profiles.length);
     
-    const profilesWithStatus = profiles.map(profile => {
-      // Check if client is actually active in memory
-      const client = activeClients.get(profile.clientId);
+    // Fix inconsistent statuses before returning
+    for (const profile of profiles) {
       const clientInfo = clientData.get(profile.clientId);
+      const hasActiveClient = activeClients.has(profile.clientId);
       
-      // Determine real connection status
-      let realStatus = profile.status;
-      let isActuallyConnected = profile.isConnected;
-      
-      if (client && clientInfo) {
-        // Client exists in memory
-        if (clientInfo.status === 'connected') {
-          realStatus = 'connected';
-          isActuallyConnected = true;
-        } else if (clientInfo.status === 'connecting') {
-          realStatus = 'connecting';
-          isActuallyConnected = false;
-        } else if (clientInfo.status === 'error') {
-          realStatus = 'error';
-          isActuallyConnected = false;
-        }
-      } else {
-        // Client not in memory, should be disconnected
-        realStatus = 'disconnected';
-        isActuallyConnected = false;
-        
-        // Update database if status is inconsistent
-        if (profile.isConnected) {
-          console.log('Fixing inconsistent status for profile:', profile.name);
-          profile.markDisconnected();
-        }
+      // Check for inconsistencies and fix them
+      if (profile.status === 'connecting' && !profile.isConnected && (!clientInfo || clientInfo.status !== 'connecting')) {
+        console.log(`🔧 Fixing inconsistent status for profile ${profile.name}: connecting -> disconnected`);
+        await profile.update({ status: 'disconnected' });
+      } else if (profile.status === 'connected' && !profile.isConnected) {
+        console.log(`🔧 Fixing inconsistent status for profile ${profile.name}: connected -> disconnected`);
+        await profile.update({ status: 'disconnected' });
       }
+    }
+    
+    // Reload profiles after fixes
+    const updatedProfiles = await WhatsAppProfile.findAll();
+    
+    // Add debug information for each profile
+    const profilesWithDebug = updatedProfiles.map(profile => {
+      const clientInfo = clientData.get(profile.clientId);
+      const hasActiveClient = activeClients.has(profile.clientId);
+      
+      console.log(`📊 Profile ${profile.name} (ID: ${profile.id}):`, {
+        dbStatus: profile.status,
+        dbIsConnected: profile.isConnected,
+        clientDataStatus: clientInfo?.status,
+        hasActiveClient,
+        clientId: profile.clientId
+      });
       
       return {
-        id: profile.id,
-        name: profile.name,
-        phoneNumber: profile.phoneNumber,
-        profilePhoto: profile.profilePhoto,
-        isConnected: isActuallyConnected,
-        isActive: profile.isActive,
-        status: realStatus,
-        lastConnected: profile.lastConnected,
-        lastDisconnected: profile.lastDisconnected,
-        createdAt: profile.createdAt
+        ...profile.toJSON(),
+        debug: {
+          clientDataStatus: clientInfo?.status,
+          hasActiveClient,
+          clientId: profile.clientId
+        }
       };
     });
     
-    console.log('Returning profiles with real-time status:', profilesWithStatus);
-    return res.json(profilesWithStatus);
+    res.json(profilesWithDebug);
   } catch (error) {
-    console.error('Error fetching profiles:', error);
-    return res.status(500).json({ error: 'Failed to fetch profiles', details: error instanceof Error ? error.message : 'Unknown error' });
+    console.error('❌ Error listing profiles:', error);
+    res.status(500).json({ error: 'Failed to list profiles' });
+  }
+});
+
+
+
+// Force sync chats from WhatsApp
+router.post('/profiles/:id/sync-chats', async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log('🔄 Sync chats request for profile ID:', id);
+    
+    const profile = await WhatsAppProfile.findByPk(id);
+    
+    if (!profile) {
+      console.log('❌ Profile not found:', id);
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+    
+    const client = activeClients.get(profile.clientId);
+    const clientInfo = clientData.get(profile.clientId);
+    
+    if (!client || !clientInfo || clientInfo.status !== 'connected') {
+      console.log('❌ Client not connected for sync:', {
+        profileId: id,
+        hasClient: !!client,
+        clientStatus: clientInfo?.status
+      });
+      return res.status(400).json({ error: 'Profile is not connected' });
+    }
+    
+    console.log('📋 Fetching chats from WhatsApp...');
+    const chats = await client.getChats();
+    console.log('✅ Real chats fetched:', chats.length);
+    
+    const formattedChats = chats.map((chat: any) => {
+      return {
+        id: chat.id._serialized,
+        contact: {
+          id: chat.id._serialized,
+          name: chat.name,
+          number: chat.id.user,
+          avatar: null, // Removido carregamento de fotos para evitar travamento
+          lastMessage: chat.lastMessage?.body || '',
+          lastTime: chat.lastMessage?.timestamp ? new Date(chat.lastMessage.timestamp * 1000).toLocaleTimeString() : '',
+          unreadCount: chat.unreadCount,
+          isOnline: false,
+          isTyping: false,
+          status: 'none',
+          isGroup: chat.isGroup
+        },
+        messages: [],
+        unreadCount: chat.unreadCount,
+        lastActivity: chat.lastMessage?.timestamp ? new Date(chat.lastMessage.timestamp * 1000) : new Date(),
+        isPinned: false,
+        isArchived: false
+      };
+    });
+    
+    console.log('✅ Returning formatted real chats:', formattedChats.length);
+    return res.json({
+      success: true,
+      message: 'Chats synced successfully',
+      chats: formattedChats,
+      totalChats: formattedChats.length
+    });
+
+  } catch (error) {
+    console.error('Error in sync chats route:', error);
+    return res.status(500).json({ error: 'Failed to sync chats', details: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
+// Force reconnect profile (simplified)
+router.post('/profiles/:id/force-reconnect', async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log('🔄 Force reconnect request for profile ID:', id);
+    
+    const profile = await WhatsAppProfile.findByPk(id);
+    
+    if (!profile) {
+      console.log('❌ Profile not found:', id);
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+
+    console.log('🔗 Force reconnecting profile:', profile.name, 'with clientId:', profile.clientId);
+
+    // Update profile status to connecting
+    await profile.update({ 
+      status: 'connecting',
+      isConnected: false
+    });
+
+    // Remove existing client if any
+    const existingClient = activeClients.get(profile.clientId);
+    if (existingClient) {
+      try {
+        await existingClient.destroy();
+      } catch (error) {
+        console.log('⚠️ Error destroying existing client:', error);
+      }
+      activeClients.delete(profile.clientId);
+      clientData.delete(profile.clientId);
+    }
+
+    // Create new client instance
+    console.log('🔧 Creating new WhatsApp client...');
+    const client = new Client({
+      authStrategy: new LocalAuth({ clientId: profile.clientId }),
+      puppeteer: {
+        headless: false,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--window-size=1200,800'
+        ],
+        timeout: 30000
+      }
+    });
+
+    // Store client instance
+    activeClients.set(profile.clientId, client);
+
+    // Store client data
+    clientData.set(profile.clientId, {
+      profileName: profile.name,
+      status: 'connecting',
+      profileId: profile.id
+    });
+
+    // Handle client events
+    client.on('ready', async () => {
+      console.log(`✅ WhatsApp client force reconnected!`, {
+        profileName: profile.name,
+        phoneNumber: client.info?.wid?.user
+      });
+      
+      await profile.markConnected(client.info.wid.user);
+      
+      const clientInfo = clientData.get(profile.clientId);
+      if (clientInfo) {
+        clientInfo.status = 'connected';
+        clientInfo.phoneNumber = client.info.wid.user;
+        clientData.set(profile.clientId, clientInfo);
+      }
+    });
+
+    client.on('qr', async (qr) => {
+      try {
+        console.log('QR code generated for force reconnection:', profile.clientId);
+        const qrCodeDataUrl = await qrcode.toDataURL(qr);
+        const clientInfo = clientData.get(profile.clientId);
+        if (clientInfo) {
+          clientInfo.qrCode = qrCodeDataUrl;
+          clientInfo.status = 'qr_ready';
+          clientData.set(profile.clientId, clientInfo);
+        }
+      } catch (error) {
+        console.error('Error generating QR code:', error);
+      }
+    });
+
+    client.on('error', async (error) => {
+      console.error(`WhatsApp client error for ${profile.clientId}:`, error);
+      await profile.markError();
+      
+      const clientInfo = clientData.get(profile.clientId);
+      if (clientInfo) {
+        clientInfo.status = 'error';
+        clientData.set(profile.clientId, clientInfo);
+      }
+    });
+
+    // Initialize client
+    console.log('Initializing WhatsApp client for force reconnection...');
+    try {
+      await client.initialize();
+      console.log('WhatsApp client initialized successfully for force reconnection');
+    } catch (error) {
+      console.error('Error initializing WhatsApp client for force reconnection:', error);
+      await profile.markError();
+      throw error;
+    }
+
+    return res.json({
+      message: 'Profile force reconnection initiated',
+      status: 'connecting',
+      profileId: profile.id,
+      clientId: profile.clientId
+    });
+
+  } catch (error) {
+    console.error('Error in force reconnect route:', error);
+    return res.status(500).json({ error: 'Failed to force reconnect profile', details: error instanceof Error ? error.message : 'Unknown error' });
   }
 });
 
@@ -540,42 +930,103 @@ router.put('/profiles/:id/toggle', async (req, res) => {
   }
 });
 
-// Connect existing profile
-router.post('/profiles/:id/connect', async (req, res) => {
+// Reconnect existing profile
+router.post('/profiles/:id/reconnect', async (req, res) => {
   try {
     const { id } = req.params;
+    console.log('🔄 Reconnect request for profile ID:', id);
+    
     const profile = await WhatsAppProfile.findByPk(id);
     
     if (!profile) {
+      console.log('❌ Profile not found:', id);
       return res.status(404).json({ error: 'Profile not found' });
     }
 
-    if (profile.isConnected) {
-      return res.json({ message: 'Profile is already connected' });
+    console.log('🔗 Reconnecting existing profile:', profile.name, 'with clientId:', profile.clientId);
+
+    // Check if client already exists
+    const existingClient = activeClients.get(profile.clientId);
+    if (existingClient) {
+      try {
+        console.log('🔄 Client exists, testing connection...');
+        const state = await existingClient.getState();
+        if (state === 'CONNECTED') {
+          console.log('✅ Client is already connected');
+          return res.json({ 
+            message: 'Profile is already connected',
+            status: 'connected',
+            profileId: profile.id
+          });
+        } else {
+          console.log('🔄 Client exists but not connected, destroying and recreating...');
+          await existingClient.destroy();
+          activeClients.delete(profile.clientId);
+          clientData.delete(profile.clientId);
+        }
+      } catch (error) {
+        console.log('❌ Error testing existing client, destroying and recreating...');
+        try {
+          await existingClient.destroy();
+        } catch (destroyError) {
+          console.log('⚠️ Error destroying client:', destroyError);
+        }
+        activeClients.delete(profile.clientId);
+        clientData.delete(profile.clientId);
+      }
     }
 
-    console.log('Connecting existing profile:', profile.name, 'with clientId:', profile.clientId);
-
     // Create new client instance for existing profile
+    console.log('🔧 Creating WhatsApp client...');
     const client = new Client({
       authStrategy: new LocalAuth({ clientId: profile.clientId }),
       puppeteer: {
         headless: false,
+        ...(process.env.CHROME_PATH && { executablePath: process.env.CHROME_PATH }),
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
           '--disable-gpu',
-          '--window-size=1200,800'
-        ]
+          '--window-size=1200,800',
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding',
+          '--disable-field-trial-config',
+          '--disable-ipc-flooding-protection',
+          '--no-first-run',
+          '--no-default-browser-check',
+          '--disable-default-apps',
+          '--disable-extensions',
+          '--disable-plugins',
+          '--disable-sync',
+          '--disable-translate',
+          '--hide-scrollbars',
+          '--mute-audio',
+          '--no-zygote',
+          '--single-process',
+          '--disable-background-networking',
+          '--disable-client-side-phishing-detection',
+          '--disable-component-update',
+          '--disable-domain-reliability',
+          '--disable-features=TranslateUI',
+          '--disable-print-preview',
+          '--disable-sync',
+          '--metrics-recording-only',
+          '--no-first-run',
+          '--safebrowsing-disable-auto-update',
+          '--enable-automation',
+          '--password-store=basic',
+          '--use-mock-keychain'
+        ],
+        timeout: 30000
       }
     });
 
     // Store client instance
     activeClients.set(profile.clientId, client);
-
-    // Update profile status
-    await profile.update({ status: 'connecting' });
 
     // Store client data
     clientData.set(profile.clientId, {
@@ -584,10 +1035,33 @@ router.post('/profiles/:id/connect', async (req, res) => {
       profileId: profile.id
     });
 
-    // Handle events
+    // Handle client events
+    client.on('loading_screen', (percent, message) => {
+      console.log(`WhatsApp loading: ${percent}% - ${message}`);
+    });
+
+    client.on('qr', async (qr) => {
+      try {
+        console.log('QR code generated for reconnection:', profile.clientId);
+        const qrCodeDataUrl = await qrcode.toDataURL(qr);
+        const clientInfo = clientData.get(profile.clientId);
+        if (clientInfo) {
+          clientInfo.qrCode = qrCodeDataUrl;
+          clientInfo.status = 'qr_ready';
+          clientData.set(profile.clientId, clientInfo);
+        }
+      } catch (error) {
+        console.error('Error generating QR code:', error);
+      }
+    });
+
     client.on('ready', async () => {
-      console.log(`WhatsApp client ${profile.clientId} reconnected!`);
-      await profile.markConnected();
+      console.log(`✅ WhatsApp client reconnected!`, {
+        profileName: profile.name,
+        phoneNumber: client.info?.wid?.user
+      });
+      
+      await profile.markConnected(client.info.wid.user);
       
       const clientInfo = clientData.get(profile.clientId);
       if (clientInfo) {
@@ -608,8 +1082,169 @@ router.post('/profiles/:id/connect', async (req, res) => {
       }
     });
 
+    // Initialize client
+    console.log('Initializing WhatsApp client for reconnection...');
+    try {
+      await client.initialize();
+      console.log('WhatsApp client initialized successfully for reconnection');
+    } catch (error) {
+      console.error('Error initializing WhatsApp client for reconnection:', error);
+      await profile.markError();
+      throw error;
+    }
+
+    return res.json({
+      message: 'Profile reconnection initiated',
+      status: 'connecting',
+      profileId: profile.id,
+      clientId: profile.clientId
+    });
+
+  } catch (error) {
+    console.error('Error in reconnect route:', error);
+    return res.status(500).json({ error: 'Failed to reconnect profile', details: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
+// Connect existing profile
+router.post('/profiles/:id/connect', async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log('🔍 Connect request for profile ID:', id);
+    
+    const profile = await WhatsAppProfile.findByPk(id);
+    
+    if (!profile) {
+      console.log('❌ Profile not found:', id);
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+
+    if (profile.isConnected) {
+      console.log('ℹ️ Profile is already connected:', profile.name);
+      return res.json({ message: 'Profile is already connected' });
+    }
+
+    console.log('🔗 Connecting existing profile:', profile.name, 'with clientId:', profile.clientId);
+
+    // Create new client instance for existing profile
+    console.log('🔧 Creating WhatsApp client...');
+    const client = new Client({
+      authStrategy: new LocalAuth({ clientId: profile.clientId }),
+      puppeteer: {
+        headless: false,
+        ...(process.env.CHROME_PATH && { executablePath: process.env.CHROME_PATH }), // Use system Chrome if available
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--window-size=1200,800',
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding',
+          '--disable-field-trial-config',
+          '--disable-ipc-flooding-protection',
+          '--no-first-run',
+          '--no-default-browser-check',
+          '--disable-default-apps',
+          '--disable-extensions',
+          '--disable-plugins',
+          '--disable-sync',
+          '--disable-translate',
+          '--hide-scrollbars',
+          '--mute-audio',
+          '--no-zygote',
+          '--single-process',
+          '--disable-background-networking',
+          '--disable-client-side-phishing-detection',
+          '--disable-component-update',
+          '--disable-domain-reliability',
+          '--disable-features=TranslateUI',
+          '--disable-print-preview',
+          '--disable-sync',
+          '--metrics-recording-only',
+          '--no-first-run',
+          '--safebrowsing-disable-auto-update',
+          '--enable-automation',
+          '--password-store=basic',
+          '--use-mock-keychain'
+        ],
+        timeout: 30000 // 30 seconds timeout
+      }
+    });
+
+    console.log('✅ WhatsApp client created successfully');
+
+    // Store client instance
+    activeClients.set(profile.clientId, client);
+    console.log('💾 Client stored in activeClients');
+
+    // Update profile status
+    await profile.update({ status: 'connecting' });
+    console.log('📝 Profile status updated to connecting');
+
+    // Store client data
+    clientData.set(profile.clientId, {
+      profileName: profile.name,
+      status: 'connecting',
+      profileId: profile.id
+    });
+    console.log('💾 Client data stored');
+
+    // Handle events
+    client.on('loading_screen', (percent, message) => {
+      console.log(`📱 WhatsApp loading: ${percent}% - ${message}`);
+    });
+
+    client.on('qr', async (qr) => {
+      try {
+        console.log('📱 QR code generated for existing profile:', profile.clientId);
+        const qrCodeDataUrl = await qrcode.toDataURL(qr);
+        const clientInfo = clientData.get(profile.clientId);
+        if (clientInfo) {
+          clientInfo.qrCode = qrCodeDataUrl;
+          clientInfo.status = 'qr_ready';
+          clientData.set(profile.clientId, clientInfo);
+          console.log('✅ QR code stored for existing profile:', profile.clientId);
+        }
+      } catch (error) {
+        console.error('❌ Error generating QR code:', error);
+      }
+    });
+
+    client.on('ready', async () => {
+      console.log(`✅ WhatsApp client ${profile.clientId} reconnected!`);
+      await profile.markConnected();
+      
+      const clientInfo = clientData.get(profile.clientId);
+      if (clientInfo) {
+        clientInfo.status = 'connected';
+        clientInfo.phoneNumber = client.info.wid.user;
+        clientData.set(profile.clientId, clientInfo);
+      }
+    });
+
+    client.on('error', async (error) => {
+      console.error(`❌ WhatsApp client error for ${profile.clientId}:`, error);
+      console.error('Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : 'No stack trace',
+        name: error instanceof Error ? error.name : 'Unknown error type'
+      });
+      
+      await profile.markError();
+      
+      const clientInfo = clientData.get(profile.clientId);
+      if (clientInfo) {
+        clientInfo.status = 'error';
+        clientData.set(profile.clientId, clientInfo);
+      }
+    });
+
     client.on('disconnected', async (reason) => {
-      console.log(`WhatsApp client ${profile.clientId} disconnected:`, reason);
+      console.log(`🔌 WhatsApp client ${profile.clientId} disconnected:`, reason);
       await profile.markDisconnected();
       
       const clientInfo = clientData.get(profile.clientId);
@@ -621,8 +1256,31 @@ router.post('/profiles/:id/connect', async (req, res) => {
     });
 
     // Initialize client
-    await client.initialize();
+    console.log('🚀 Initializing WhatsApp client...');
+    try {
+      await client.initialize();
+      console.log('✅ WhatsApp client initialized successfully');
+    } catch (error) {
+      console.error('❌ Error initializing WhatsApp client:', error);
+      console.error('Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : 'No stack trace',
+        name: error instanceof Error ? error.name : 'Unknown error type'
+      });
+      
+      // Update profile status to error
+      await profile.markError();
+      
+      const clientInfo = clientData.get(profile.clientId);
+      if (clientInfo) {
+        clientInfo.status = 'error';
+        clientData.set(profile.clientId, clientInfo);
+      }
+      
+      throw error;
+    }
     
+    console.log('🎉 Profile connection initiated successfully');
     return res.json({
       message: 'Profile connection initiated',
       clientId: profile.clientId,
@@ -630,8 +1288,13 @@ router.post('/profiles/:id/connect', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error connecting profile:', error);
-    return res.status(500).json({ error: 'Failed to connect profile' });
+    console.error('❌ Error connecting profile:', error);
+    console.error('Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : 'No stack trace',
+      name: error instanceof Error ? error.name : 'Unknown error type'
+    });
+    return res.status(500).json({ error: 'Failed to connect profile', details: error instanceof Error ? error.message : 'Unknown error' });
   }
 });
 
@@ -786,167 +1449,234 @@ router.get('/clients', (req, res) => {
 });
 
 
-// Get chats for a profile
-router.get('/profiles/:profileId/chats', chatRateLimiter, async (req, res) => {
+// Get client status for debugging
+router.get('/profiles/:profileId/status', async (req, res) => {
   try {
     const { profileId } = req.params;
+    console.log('🔍 GET /profiles/:profileId/status - Request received:', { profileId });
+    
     const profile = await WhatsAppProfile.findByPk(profileId);
     
     if (!profile) {
+      console.log('❌ Profile not found:', profileId);
       return res.status(404).json({ error: 'Profile not found' });
     }
     
     const client = activeClients.get(profile.clientId);
     const clientInfo = clientData.get(profile.clientId);
     
-    // Verificar se o cliente está realmente conectado
-    const isActuallyConnected = client && clientInfo && clientInfo.status === 'connected';
+    const status = {
+      profileId: profile.id,
+      profileName: profile.name,
+      clientId: profile.clientId,
+      profileStatus: profile.status,
+      profileIsConnected: profile.isConnected,
+      hasClient: !!client,
+      clientStatus: clientInfo?.status,
+      activeClientsCount: activeClients.size,
+      clientDataCount: clientData.size,
+      allActiveClients: Array.from(activeClients.keys()),
+      allClientData: Array.from(clientData.keys())
+    };
+    
+    console.log('🔍 Client status response:', status);
+    return res.json(status);
+  } catch (error) {
+    console.error('Error getting client status:', error);
+    return res.status(500).json({ error: 'Failed to get client status' });
+  }
+});
+
+// Get chats for a profile
+router.get('/profiles/:profileId/chats', chatRateLimiter, async (req, res) => {
+  try {
+    const { profileId } = req.params;
+    console.log('📋 GET /profiles/:profileId/chats - Request received:', { profileId });
+    
+    const profile = await WhatsAppProfile.findByPk(profileId);
+    
+    if (!profile) {
+      console.log('❌ Profile not found:', profileId);
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+    
+    console.log('✅ Profile found:', {
+      id: profile.id,
+      clientId: profile.clientId,
+      status: profile.status
+    });
+    
+    const client = activeClients.get(profile.clientId);
+    const clientInfo = clientData.get(profile.clientId);
+    
+    console.log('🔍 Client status:', {
+      hasClient: !!client,
+      clientStatus: clientInfo?.status,
+      activeClientsCount: activeClients.size,
+      clientDataCount: clientData.size,
+      profileStatus: profile.status,
+      profileIsConnected: profile.isConnected,
+      clientId: profile.clientId
+    });
+
+    // Debug: Log all active clients
+    console.log('🔍 All active clients:', Array.from(activeClients.keys()));
+    console.log('🔍 All client data:', Array.from(clientData.keys()));
+    
+    // Check if client is actually connected by testing the connection
+    let isActuallyConnected = false;
+    
+    if (client && clientInfo) {
+      try {
+        // Test if client is really connected by trying to get basic info
+        if (client.info && client.info.wid) {
+          isActuallyConnected = true;
+          console.log('✅ Client is actually connected - info available');
+        } else {
+          console.log('⚠️ Client exists but no info available - testing connection...');
+          // Try to get client info to test connection
+          try {
+            await client.getState();
+            isActuallyConnected = true;
+            console.log('✅ Client connection test successful');
+          } catch (testError) {
+            console.log('❌ Client connection test failed:', testError instanceof Error ? testError.message : 'Unknown error');
+            isActuallyConnected = false;
+          }
+        }
+      } catch (error) {
+        console.log('❌ Error testing client connection:', error instanceof Error ? error.message : 'Unknown error');
+        isActuallyConnected = false;
+      }
+    }
+    
+    console.log('🔍 Connection test result:', {
+      hasClient: !!client,
+      clientStatus: clientInfo?.status,
+      isActuallyConnected,
+      profileStatus: profile.status
+    });
     
     if (!client || !isActuallyConnected) {
-      console.log('Profile not connected, returning mock data:', {
+      console.log('Profile not connected, attempting to reconnect and returning mock data:', {
         profileId,
         hasClient: !!client,
         clientStatus: clientInfo?.status,
         profileStatus: profile.status
       });
       
-      // Retornar dados mockados para teste
-      const mockChats = [
-        {
-          id: 'chat1',
-          contact: {
-            id: 'contact1',
-            name: 'Leandro',
-            number: '5511999999999',
-            avatar: null,
-            lastMessage: 'Ew',
-            lastTime: '23:27',
-            unreadCount: 27,
-            isOnline: false,
-            isTyping: false,
-            status: 'none',
-            isGroup: false
-          },
-          messages: [],
-          unreadCount: 27,
-          lastActivity: new Date(),
-          isPinned: false,
-          isArchived: false
-        },
-        {
-          id: 'chat2',
-          contact: {
-            id: 'contact2',
-            name: 'RBS Promotora',
-            number: '5511888888888',
-            avatar: null,
-            lastMessage: 'Olá, como vai? Seu FGTS foi atualizado!',
-            lastTime: '09:00',
-            unreadCount: 1,
-            isOnline: false,
-            isTyping: false,
-            status: 'none',
-            isGroup: false
-          },
-          messages: [],
-          unreadCount: 1,
-          lastActivity: new Date(),
-          isPinned: false,
-          isArchived: false
-        },
-        {
-          id: 'group1',
-          contact: {
-            id: 'group1',
-            name: 'Família Silva',
-            number: 'group1',
-            avatar: null,
-            lastMessage: 'Boa noite família!',
-            lastTime: '20:30',
-            unreadCount: 0,
-            isOnline: false,
-            isTyping: false,
-            status: 'none',
-            isGroup: true
-          },
-          messages: [],
-          unreadCount: 0,
-          lastActivity: new Date(),
-          isPinned: false,
-          isArchived: false
-        },
-        {
-          id: 'group2',
-          contact: {
-            id: 'group2',
-            name: 'Trabalho - Projetos',
-            number: 'group2',
-            avatar: null,
-            lastMessage: 'Reunião amanhã às 10h',
-            lastTime: '18:45',
-            unreadCount: 3,
-            isOnline: false,
-            isTyping: false,
-            status: 'none',
-            isGroup: true
-          },
-          messages: [],
-          unreadCount: 3,
-          lastActivity: new Date(),
-          isPinned: false,
-          isArchived: false
-        },
-        {
-          id: 'group3',
-          contact: {
-            id: 'group3',
-            name: 'Amigos da Faculdade',
-            number: 'group3',
-            avatar: null,
-            lastMessage: 'Quem vai na festa?',
-            lastTime: '22:15',
-            unreadCount: 0,
-            isOnline: false,
-            isTyping: false,
-            status: 'none',
-            isGroup: true
-          },
-          messages: [],
-          unreadCount: 0,
-          lastActivity: new Date(),
-          isPinned: false,
-          isArchived: false
+      // Tentar reconectar automaticamente
+      if (client && clientInfo) {
+        try {
+          console.log('🔄 Attempting automatic reconnection...');
+          await client.initialize();
+          
+          // Update client data
+          clientData.set(profile.clientId, {
+            ...clientInfo,
+            status: 'connected'
+          });
+          
+          // Update profile status
+          await profile.update({ status: 'connected' });
+          
+          console.log('✅ Automatic reconnection successful, fetching real chats...');
+          
+          // Agora tentar buscar chats reais
+          try {
+            const realChats = await client.getChats();
+            console.log('✅ Real chats fetched:', realChats.length);
+            
+            const formattedRealChats = realChats.map((chat: any) => ({
+              id: chat.id._serialized,
+              contact: {
+                id: chat.id._serialized,
+                name: chat.name,
+                number: chat.id.user,
+                avatar: null, // Removido carregamento de fotos para evitar travamento
+                lastMessage: chat.lastMessage?.body || '',
+                lastTime: chat.lastMessage?.timestamp ? new Date(chat.lastMessage.timestamp * 1000).toLocaleTimeString() : '',
+                unreadCount: chat.unreadCount,
+                isOnline: false,
+                isTyping: false,
+                status: 'none',
+                isGroup: chat.isGroup
+              },
+              messages: [],
+              unreadCount: chat.unreadCount,
+              lastActivity: chat.lastMessage?.timestamp ? new Date(chat.lastMessage.timestamp * 1000) : new Date(),
+              isPinned: false,
+              isArchived: false
+            }));
+            
+            return res.json(formattedRealChats);
+          } catch (chatError) {
+            console.log('⚠️ Failed to fetch real chats, using mock data:', chatError);
+          }
+        } catch (reconnectError) {
+          console.log('⚠️ Automatic reconnection failed, using mock data:', reconnectError);
         }
-      ];
+      }
       
-      return res.json(mockChats);
+      // Sem dados mockados - retornar erro se não conseguir conectar
+      return res.status(400).json({ 
+        error: 'WhatsApp não está conectado. Conecte o perfil primeiro.',
+        details: 'Profile is not connected to WhatsApp'
+      });
     }
     
     // Get chats from WhatsApp client
-    const chats = await client.getChats();
+    console.log('📋 Fetching chats from WhatsApp client...');
     
-    const formattedChats = chats.map((chat: any) => ({
-      id: chat.id._serialized,
-      contact: {
+    let chats;
+    try {
+      console.log('🔄 Calling client.getChats()...');
+      
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('getChats timeout after 15 seconds')), 15000);
+      });
+      
+      const chatsPromise = client.getChats();
+      chats = await Promise.race([chatsPromise, timeoutPromise]);
+      
+      console.log('✅ Chats fetched from WhatsApp:', chats.length);
+    } catch (chatError) {
+      console.error('❌ Error fetching chats from WhatsApp:', chatError);
+      console.log('⚠️ Returning mock data due to WhatsApp error');
+      
+      // Sem dados mockados - retornar erro
+      return res.status(500).json({ 
+        error: 'Erro ao carregar chats do WhatsApp',
+        details: chatError instanceof Error ? chatError.message : 'Unknown error'
+      });
+    }
+    
+    const formattedChats = chats.map((chat: any) => {
+      return {
         id: chat.id._serialized,
-        name: chat.name,
-        number: chat.id.user,
-        avatar: chat.profilePicUrl,
-        lastMessage: chat.lastMessage?.body || '',
-        lastTime: chat.lastMessage?.timestamp ? new Date(chat.lastMessage.timestamp * 1000).toLocaleTimeString() : '',
+        contact: {
+          id: chat.id._serialized,
+          name: chat.name,
+          number: chat.id.user,
+          avatar: null, // Removido carregamento de fotos para evitar travamento
+          lastMessage: chat.lastMessage?.body || '',
+          lastTime: chat.lastMessage?.timestamp ? new Date(chat.lastMessage.timestamp * 1000).toLocaleTimeString() : '',
+          unreadCount: chat.unreadCount,
+          isOnline: false,
+          isTyping: false,
+          status: 'none',
+          isGroup: chat.isGroup
+        },
+        messages: [],
         unreadCount: chat.unreadCount,
-        isOnline: false,
-        isTyping: false,
-        status: 'none',
-        isGroup: chat.isGroup
-      },
-      messages: [],
-      unreadCount: chat.unreadCount,
-      lastActivity: chat.lastMessage?.timestamp ? new Date(chat.lastMessage.timestamp * 1000) : new Date(),
-      isPinned: false,
-      isArchived: false
-    }));
+        lastActivity: chat.lastMessage?.timestamp ? new Date(chat.lastMessage.timestamp * 1000) : new Date(),
+        isPinned: false,
+        isArchived: false
+      };
+    });
     
+    console.log('✅ Returning formatted chats:', formattedChats.length);
     return res.json(formattedChats);
   } catch (error) {
     console.error('Error fetching chats:', error);
@@ -1094,45 +1824,255 @@ router.post('/profiles/:profileId/chats/:chatId/read', async (req, res) => {
   }
 });
 
-
-
-// Test route to check if Puppeteer is working
-router.get('/test-browser', async (req, res) => {
+// Get contact photo URL
+router.get('/profiles/:profileId/contacts/:contactId/photo', async (req, res) => {
   try {
-    console.log('Testing browser launch...');
+    const { profileId, contactId } = req.params;
+    const profile = await WhatsAppProfile.findByPk(profileId);
     
-    const puppeteer = require('puppeteer');
-    const browser = await puppeteer.launch({
-      headless: false,
-      defaultViewport: null,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--window-size=800,600'
-      ]
+    if (!profile) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+    
+    const client = activeClients.get(profile.clientId);
+    const clientInfo = clientData.get(profile.clientId);
+    
+    // Verificar se o cliente está realmente conectado
+    const isActuallyConnected = client && clientInfo && clientInfo.status === 'connected';
+    
+    if (!client || !isActuallyConnected) {
+      console.log('Profile not connected for contact photo:', {
+        profileId,
+        hasClient: !!client,
+        clientStatus: clientInfo?.status,
+        profileStatus: profile.status
+      });
+      return res.status(400).json({ error: 'Profile is not connected' });
+    }
+    
+    try {
+      // Get contact photo URL without downloading
+      const photoUrl = await client.getProfilePicUrl(contactId);
+      
+      if (photoUrl) {
+        console.log('Contact photo URL obtained:', { contactId, photoUrl });
+        return res.json({ 
+          success: true, 
+          photoUrl,
+          contactId 
+        });
+      } else {
+        console.log('No photo available for contact:', contactId);
+        return res.json({ 
+          success: false, 
+          message: 'No photo available',
+          contactId 
+        });
+      }
+    } catch (error) {
+      console.log('Error getting contact photo:', { contactId, error: error instanceof Error ? error.message : 'Unknown error' });
+      return res.json({ 
+        success: false, 
+        message: 'Could not get contact photo',
+        contactId 
+      });
+    }
+  } catch (error) {
+    console.error('Error in contact photo route:', error);
+    return res.status(500).json({ error: 'Failed to get contact photo' });
+  }
+});
+
+// Test Puppeteer connection
+router.get('/test-puppeteer', async (req, res) => {
+  try {
+    console.log('🧪 Testing Puppeteer connection...');
+    
+    const { Client, LocalAuth } = require('whatsapp-web.js');
+    
+    // Create a simple test client with better Puppeteer config
+    const testClient = new Client({
+      authStrategy: new LocalAuth({ clientId: 'test-client' }),
+      puppeteer: {
+        headless: true, // Use headless for testing
+        ...(process.env.CHROME_PATH && { executablePath: process.env.CHROME_PATH }), // Use system Chrome if available
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding',
+          '--disable-field-trial-config',
+          '--disable-ipc-flooding-protection',
+          '--no-first-run',
+          '--no-default-browser-check',
+          '--disable-default-apps',
+          '--disable-extensions',
+          '--disable-plugins',
+          '--disable-sync',
+          '--disable-translate',
+          '--hide-scrollbars',
+          '--mute-audio',
+          '--no-zygote',
+          '--single-process',
+          '--disable-background-networking',
+          '--disable-client-side-phishing-detection',
+          '--disable-component-update',
+          '--disable-domain-reliability',
+          '--disable-features=TranslateUI',
+          '--disable-print-preview',
+          '--disable-sync',
+          '--metrics-recording-only',
+          '--no-first-run',
+          '--safebrowsing-disable-auto-update',
+          '--enable-automation',
+          '--password-store=basic',
+          '--use-mock-keychain'
+        ],
+        timeout: 30000 // 30 seconds timeout
+      }
+    });
+
+    console.log('🔧 Test client created, attempting to initialize...');
+    
+    // Try to initialize with a longer timeout
+    const initializePromise = testClient.initialize();
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Puppeteer test timeout after 30 seconds')), 30000);
     });
     
-    const page = await browser.newPage();
-    await page.goto('https://www.google.com');
+    await Promise.race([initializePromise, timeoutPromise]);
     
-    console.log('Browser opened successfully!');
+    console.log('✅ Puppeteer test successful!');
     
-    // Close browser after 5 seconds
-    setTimeout(async () => {
-      await browser.close();
-      console.log('Test browser closed');
-    }, 5000);
+    // Clean up
+    await testClient.destroy();
     
-    res.json({ 
-      success: true, 
-      message: 'Browser test successful! Check for a new browser window.' 
+    return res.json({
+      success: true,
+      message: 'Puppeteer is working correctly'
     });
     
   } catch (error) {
-    console.error('Browser test failed:', error);
-    res.status(500).json({ 
-      error: 'Browser test failed', 
+    console.error('❌ Puppeteer test failed:', error);
+    console.error('Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : 'No stack trace',
+      name: error instanceof Error ? error.name : 'Unknown error type'
+    });
+    
+    return res.status(500).json({
+      success: false,
+      error: 'Puppeteer test failed',
       details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Get incremental sync updates
+router.get('/profiles/:profileId/sync', syncRateLimiter, async (req, res) => {
+  try {
+    const { profileId } = req.params;
+    const { since } = req.query;
+    
+    console.log('🔄 GET /profiles/:profileId/sync - Request received:', { 
+      profileId, 
+      since: since ? new Date(parseInt(since as string)) : 'no timestamp' 
+    });
+    
+    const profile = await WhatsAppProfile.findByPk(profileId);
+    
+    if (!profile) {
+      console.log('❌ Profile not found:', profileId);
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+    
+    const client = activeClients.get(profile.clientId);
+    const clientInfo = clientData.get(profile.clientId);
+    
+    if (!client || !clientInfo || clientInfo.status !== 'connected') {
+      console.log('❌ Client not connected for sync:', profileId);
+      return res.status(400).json({ error: 'Client not connected' });
+    }
+    
+    const sinceTime = since ? parseInt(since as string) : 0;
+    const updates: any[] = [];
+    
+    try {
+      // Buscar chats que foram atualizados desde o último sync
+      const chats = await client.getChats();
+      
+      for (const chat of chats) {
+        const lastMessage = await chat.fetchMessages({ limit: 1 });
+        
+        if (lastMessage.length > 0) {
+          const messageTime = lastMessage[0].timestamp * 1000;
+          
+          if (messageTime > sinceTime) {
+            updates.push({
+              type: 'chat',
+              chatId: chat.id._serialized,
+              lastMessage: lastMessage[0].body || '',
+              lastMessageTime: messageTime,
+              unreadCount: chat.unreadCount
+            });
+          }
+        }
+      }
+      
+      // Buscar mensagens não lidas ou novas
+      const allChats = await client.getChats();
+      for (const chat of allChats) {
+        const messages = await chat.fetchMessages({ limit: 10 });
+        
+        for (const message of messages) {
+          const messageTime = message.timestamp * 1000;
+          
+          if (messageTime > sinceTime) {
+            updates.push({
+              type: 'message',
+              chatId: chat.id._serialized,
+              messageId: message.id._serialized,
+              text: message.body || '',
+              time: messageTime,
+              isFromMe: message.fromMe,
+              isGroup: chat.isGroup
+            });
+          }
+        }
+      }
+      
+      console.log('✅ Sync completed:', {
+        profileId,
+        updatesCount: updates.length,
+        since: sinceTime,
+        now: Date.now()
+      });
+      
+      return res.json({
+        success: true,
+        updates,
+        timestamp: Date.now(),
+        count: updates.length
+      });
+      
+    } catch (error) {
+      console.error('❌ Error during sync:', error);
+      return res.status(500).json({ 
+        error: 'Sync failed', 
+        details: error instanceof Error ? error.message : 'Unknown error' 
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Error in sync endpoint:', error);
+    return res.status(500).json({ 
+      error: 'Internal server error', 
+      details: error instanceof Error ? error.message : 'Unknown error' 
     });
   }
 });

@@ -1,209 +1,252 @@
 # 📱 WhatsApp Enterprise
 
-> **Sistema Inteligente de Gerenciamento WhatsApp para Empresas**
+> **Intelligent WhatsApp Management System for Businesses**
 
-> **⚠️ Status: Em Desenvolvimento - Nem todas as funções estão disponíveis. Entre em contato em caso de dúvidas!**
+> **⚠️ Status: In Development - Not all features are available. Contact us for questions!**
 
-Uma plataforma web moderna que transforma o WhatsApp em uma ferramenta empresarial poderosa, oferecendo automação, inteligência artificial e uma interface administrativa completa.
+A modern web platform that transforms WhatsApp into a powerful business tool, offering automation, artificial intelligence, and a complete administrative interface.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue.svg)](https://www.typescriptlang.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black.svg)](https://nextjs.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18-green.svg)](https://nodejs.org/)
-[![Status: Development](https://img.shields.io/badge/Status-Em%20Desenvolvimento-orange.svg)](https://github.com/leandrosuza/whatsapp-enterprise)
+[![Status: Development](https://img.shields.io/badge/Status-In%20Development-orange.svg)](https://github.com/leandrosuza/whatsapp-enterprise)
 
-## 📋 Índice
+## 📋 Table of Contents
 
-- [🚀 Sobre o Projeto](#-sobre-o-projeto)
-- [✨ Funcionalidades Disponíveis](#-funcionalidades-disponíveis)
-- [🛠️ Tecnologias](#️-tecnologias)
-- [⚡ Como Usar](#-como-usar)
+- [🚀 About the Project](#-about-the-project)
+- [✨ Available Features](#-available-features)
+- [🛠️ Technologies](#️-technologies)
+- [⚡ Quick Start](#-quick-start)
 - [📱 Screenshots](#-screenshots)
-- [🔐 Segurança](#-segurança)
-- [📞 Contato](#-contato)
-- [📄 Licença](#-licença)
+- [🔐 Security](#-security)
+- [📞 Contact](#-contact)
+- [📄 License](#-license)
 
-## 🚀 Sobre o Projeto
+## 🚀 About the Project
 
-**WhatsApp Enterprise** é uma solução completa que combina:
+**WhatsApp Enterprise** is a complete solution that combines:
 
-- **🔄 Automação Inteligente** com IA integrada
-- **📊 Gerenciamento Avançado** de leads e conversas
-- **📨 Envio em Massa** com múltiplos números
-- **🎨 Interface Moderna** totalmente responsiva
-- **🔒 Sistema de Autenticação** robusto e seguro
-- **🤖 Integração WhatsApp** com Web.js
-- **👥 Gerenciamento de Perfis WhatsApp**
-- **📈 Analytics** e relatórios em tempo real
-- **💬 Chat Interface** similar ao WhatsApp Web
-- **🔍 Sistema de Filtros** inteligente
+- **🔄 Intelligent Automation** with integrated AI
+- **📊 Advanced Management** of leads and conversations
+- **📨 Bulk Messaging** with multiple numbers
+- **🎨 Modern Interface** fully responsive
+- **🔒 Robust Authentication System** secure and reliable
+- **🤖 WhatsApp Integration** with Web.js
+- **👥 WhatsApp Profile Management**
+- **📈 Analytics** and real-time reports
+- **💬 Chat Interface** similar to WhatsApp Web
+- **🔍 Intelligent Filter System**
 
-## ✨ Funcionalidades Disponíveis
+## ✨ Available Features
 
-### ✅ Implementadas (v2.1.0)
+### ✅ Implemented (v2.1.0)
 
-#### 🔐 Sistema de Autenticação
-- Login seguro com JWT
-- Middleware de proteção baseado em roles
-- Rate limiting e CORS configurado
-- Validação de entrada em todas as rotas
+#### 🔐 Authentication System
+- Secure JWT login
+- Role-based protection middleware
+- Rate limiting and CORS configured
+- Input validation on all routes
 
-#### 🎨 Interface Administrativa
-- Design moderno e responsivo
-- Componentes reutilizáveis
-- Animações suaves e efeitos visuais
-- Mobile First com navegação otimizada
-- Glass morphism e gradientes modernos
+#### 🎨 Administrative Interface
+- Modern and responsive design
+- Reusable components
+- Smooth animations and visual effects
+- Mobile First with optimized navigation
+- Glass morphism and modern gradients
 
-#### 🤖 Integração WhatsApp
-- Conexão com WhatsApp Web.js
-- Gerenciamento de múltiplos perfis
-- QR Code para autenticação
-- Status de conexão em tempo real
-- Envio de mensagens agendadas
+#### 🤖 WhatsApp Integration
+- Connection with WhatsApp Web.js
+- Multiple profile management
+- QR Code for authentication
+- Real-time connection status
+- Scheduled message sending
 
-#### 👥 Gerenciamento de Perfis
-- Criação e edição de perfis WhatsApp
-- Associação com usuários do sistema
-- Histórico de conexões
-- Configurações personalizadas
+#### 👥 Profile Management
+- WhatsApp profile creation and editing
+- Association with system users
+- Connection history
+- Custom configurations
 
-#### 💬 Interface de Chat (NOVA!)
-- Interface similar ao WhatsApp Web
-- Sistema de filtros avançado (Tudo, Não lidas, Favoritas, Grupos)
-- Indicadores visuais para grupos
-- Área de input fixa na parte inferior
-- Scroll automático para mensagens recentes
-- Suporte a diferentes tipos de mensagem
-- Dados mockados para teste
+#### 💬 Chat Interface (NEW!)
+- Interface similar to WhatsApp Web
+- Advanced filter system (All, Unread, Favorites, Groups)
+- Visual indicators for groups
+- Fixed input area at the bottom
+- Automatic scroll to recent messages
+- Support for different message types
+- Mocked data for testing
 
-### 🚧 Em Desenvolvimento
+#### 📊 Analytics Dashboard (NEW!)
+- Real-time metrics dashboard
+- Message statistics
+- Performance analytics
+- Data visualization
 
-#### 📊 Analytics e Relatórios
-- [ ] Dashboard de métricas em tempo real
-- [ ] Relatórios de mensagens enviadas
-- [ ] Estatísticas de performance
-- [ ] Exportação de dados
+#### 👥 Contact Management (NEW!)
+- Contact database management
+- Contact photo handling
+- Contact categorization
+- Import/export functionality
 
-#### 🤖 Automação Inteligente
-- [ ] Sistema de IA para respostas automáticas
-- [ ] Chatbot inteligente
-- [ ] Automação de campanhas
+#### 💬 Conversation Management (NEW!)
+- Conversation history
+- Message threading
+- Conversation status tracking
+- Search and filter conversations
 
-## 🛠️ Tecnologias
+#### ⚙️ Settings Panel (NEW!)
+- System configuration
+- User preferences
+- Profile settings
+- Security settings
+
+#### 🤖 Automation System (NEW!)
+- Automated response system
+- Campaign automation
+- Trigger-based actions
+- Workflow management
+
+## 🛠️ Technologies
 
 ### Frontend
-- **Next.js 15** - Framework React com SSR
-- **TypeScript** - Tipagem estática
-- **Tailwind CSS** - Framework CSS utilitário
-- **Socket.IO Client** - Comunicação em tempo real
+- **Next.js 15** - React framework with SSR
+- **TypeScript** - Static typing
+- **Tailwind CSS** - Utility CSS framework
+- **Socket.IO Client** - Real-time communication
+- **React Query** - Data fetching and caching
+- **Zustand** - State management
 
 ### Backend
-- **Node.js** - Runtime JavaScript
-- **Express.js** - Framework web
-- **TypeScript** - Tipagem estática
-- **SQLite** - Banco de dados
+- **Node.js** - JavaScript runtime
+- **Express.js** - Web framework
+- **TypeScript** - Static typing
+- **SQLite** - Database
 - **Socket.IO** - WebSockets
+- **Sequelize** - ORM
 
 ### WhatsApp Integration
-- **whatsapp-web.js** - Biblioteca oficial do WhatsApp
-- **Puppeteer** - Automação de navegador
+- **whatsapp-web.js** - Official WhatsApp library
+- **Puppeteer** - Browser automation
 
-### Autenticação & Segurança
+### Authentication & Security
 - **JWT** - JSON Web Tokens
-- **bcrypt** - Hash de senhas
+- **bcrypt** - Password hashing
 - **CORS** - Cross-Origin Resource Sharing
-- **Rate Limiting** - Proteção contra spam
+- **Rate Limiting** - Spam protection
+- **Helmet** - Security headers
 
-## ⚡ Como Usar
+### AI & Automation
+- **OpenAI** - AI integration
+- **Node-cron** - Scheduled tasks
 
-### 1. Instalação Rápida
+## ⚡ Quick Start
+
+### 1. Quick Installation
 
 ```bash
-# Clone o repositório
+# Clone the repository
 git clone https://github.com/leandrosuza/whatsapp-enterprise.git
 cd whatsapp-enterprise
 
-# Instale as dependências
+# Install dependencies
 npm install
 
-# Configure o ambiente
+# Setup environment
 cp backend/env.example backend/.env
 cp frontend/env.local.example frontend/.env.local
 
-# Crie o usuário admin
+# Create admin user
 cd backend && npm run create-admin
 
-# Inicie o projeto
+# Start the project
 npm run dev
 ```
 
-### 2. Acesse o Sistema
+### 2. Access the System
 
 - **URL:** `http://localhost:3000/admin/login`
 - **Email:** `admin@gmail.com`
-- **Senha:** `admin123`
+- **Password:** `admin123`
 
-### 3. Configuração do WhatsApp
+### 3. WhatsApp Configuration
 
-1. Faça login no sistema administrativo
-2. Crie um novo perfil WhatsApp
-3. Escaneie o QR Code com seu WhatsApp
-4. Aguarde a conexão ser estabelecida
-5. Acesse a interface de chat
+1. Login to the administrative system
+2. Create a new WhatsApp profile
+3. Scan the QR Code with your WhatsApp
+4. Wait for the connection to be established
+5. Access the chat interface
 
 ## 📱 Screenshots
 
-### 🏠 Tela de Login
-![Tela de Login](docs/adminLoginHome.png)
+### 🏠 Login Screen
+![Login Screen](docs/adminLoginHome.png)
 
-### 📊 Dashboard Administrativo
+### 📊 Administrative Dashboard
 ![Dashboard](docs/adminHome.png)
 
-### 👤 Perfil WhatsApp Aberto
-![Perfil WhatsApp](docs/adminProfileOpened.png)
+### 👤 WhatsApp Profile Opened
+![WhatsApp Profile](docs/adminProfileOpened.png)
 
-### 💬 Interface de Chat (Nova!)
-*Interface similar ao WhatsApp Web com filtros e indicadores visuais*
+### 💬 Chat Interface
+![Chat Interface](docs/adminWhatsAppView.png)
 
-## 🔐 Segurança
+### 📊 Analytics Dashboard
+![Analytics](docs/adminAnalytics.png)
 
-- **Senhas criptografadas** com bcrypt
-- **Tokens JWT** com expiração
-- **Rate limiting** e CORS configurado
-- **Validação de entrada** em todas as rotas
-- **Middleware de proteção** baseado em roles
-- **Sessões WhatsApp** seguras
-- **Sanitização de dados** em todas as requisições
+### 👥 Contact Management
+![Contacts](docs/adminContacts.png)
 
-## 📞 Contato
+### 💬 Conversation Management
+![Conversations](docs/adminConversations.png)
 
-### ⚠️ Suporte e Dúvidas
+### 🤖 Automation System
+![Automations](docs/adminAutomations.png)
 
-**Status Atual:** Em desenvolvimento ativo
+### ⚙️ Settings Panel
+![Settings](docs/adminSettings.png)
+
+## 🔐 Security
+
+- **Encrypted passwords** with bcrypt
+- **JWT tokens** with expiration
+- **Rate limiting** and CORS configured
+- **Input validation** on all routes
+- **Role-based protection middleware**
+- **Secure WhatsApp sessions**
+- **Data sanitization** on all requests
+- **Security headers** with Helmet
+- **Compression** for performance
+- **Request logging** with Morgan
+
+## 📞 Contact
+
+### ⚠️ Support and Questions
+
+**Current Status:** Active development
 
 - **Email:** leandrosuza.dev@gmail.com
-- **GitHub Issues:** [Reportar Bug](https://github.com/leandrosuza/whatsapp-enterprise/issues)
+- **GitHub Issues:** [Report Bug](https://github.com/leandrosuza/whatsapp-enterprise/issues)
 - **WhatsApp:** +55 (11) 99999-9999
 
-### 🤝 Contribuindo
+### 🤝 Contributing
 
-1. Fork o projeto
-2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
-3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
-4. Push para a branch (`git push origin feature/AmazingFeature`)
-5. Abra um Pull Request
+1. Fork the project
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-### ⭐ Se este projeto te ajudou, considere dar uma estrela!
+### ⭐ If this project helped you, consider giving it a star!
 
 [![GitHub stars](https://img.shields.io/github/stars/leandrosuza/whatsapp-enterprise.svg?style=social&label=Star)](https://github.com/leandrosuza/whatsapp-enterprise)
 
-## 📄 Licença
+## 📄 License
 
-MIT License - veja o arquivo [LICENSE](LICENSE) para detalhes.
+MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-**Desenvolvido com ❤️ para revolucionar a comunicação empresarial**
+**Developed with ❤️ to revolutionize business communication**
 
-> **⚠️ Lembrete:** Este projeto está em desenvolvimento ativo. Funcionalidades podem ser adicionadas, modificadas ou removidas sem aviso prévio.
+> **⚠️ Reminder:** This project is under active development. Features may be added, modified, or removed without prior notice.
