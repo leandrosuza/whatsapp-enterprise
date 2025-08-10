@@ -1,5 +1,5 @@
-import { sequelize } from '../config/database';
-import User from '../models/User';
+import { sequelize } from '../infrastructure/database/database';
+import User from '../core/entities/User';
 
 async function createAdminUser() {
   try {

@@ -1,5 +1,7 @@
-import { sequelize } from '../config/database';
-import { initializeAssociations } from '../models';
+import { sequelize } from '../infrastructure/database/database';
+import { initializeAssociations } from '../core/entities';
+import '../core/entities/DDD'; // Import DDD model to ensure it's registered
+import '../core/entities/Tag'; // Import Tag model to ensure it's registered
 
 async function initializeDatabase() {
   try {
@@ -16,6 +18,7 @@ async function initializeDatabase() {
     console.log('   - users');
     console.log('   - contacts');
     console.log('   - whatsapp_profiles');
+    console.log('   - tags');
     
     process.exit(0);
   } catch (error) {

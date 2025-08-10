@@ -1,26 +1,81 @@
-import { sequelize } from '../infrastructure/database/database';
-import WhatsAppProfile from '../core/entities/WhatsAppProfile';
+import { sequelize } from '../database/database';
+import WhatsAppProfile from '../../core/entities/WhatsAppProfile';
 import { Client, LocalAuth } from 'whatsapp-web.js';
-import path from 'path';
 
-// Store active WhatsApp clients (same as in routes/whatsapp.ts)
-const activeClients = new Map<string, any>();
-const clientData = new Map<string, {
-  profileName: string;
-  phoneNumber?: string;
-  status: 'connecting' | 'connected' | 'disconnected' | 'error' | 'qr_ready';
-  qrCode?: string;
-  profileId?: number;
-}>();
+// Import the active clients and client data from the WhatsApp routes
+// We need to make these available globally or pass them as parameters
+declare global {
+  var activeClients: Map<string, any>;
+  var clientData: Map<string, {
+    profileName: string;
+    phoneNumber?: string;
+    status: 'connecting' | 'connected' | 'disconnected' | 'error' | 'qr_ready';
+    qrCode?: string;
+    profileId?: number;
+  }>;
+}
 
-async function autoReconnectProfiles() {
+// Initialize global maps if they don't exist
+if (!global.activeClients) {
+  global.activeClients = new Map();
+}
+if (!global.clientData) {
+  global.clientData = new Map();
+}
+
+// Function to check if a profile is really available
+async function isProfileAvailable(profile: WhatsAppProfile): Promise<boolean> {
   try {
-    console.log('🔄 Auto-reconnecting WhatsApp profiles...');
+    // Check if there's already an active client for this profile
+    const existingClient = global.activeClients.get(profile.clientId);
+    if (existingClient) {
+      // If client already exists, check if it's connected
+      const clientInfo = global.clientData.get(profile.clientId);
+      if (clientInfo && clientInfo.status === 'connected') {
+        console.log(`✅ Profile ${profile.name} already connected, skipping reconnection`);
+        return false; // No need to reconnect
+      }
+    }
+
+    // Check if profile has valid data for reconnection
+    if (!profile.clientId || !profile.name) {
+      console.log(`⚠️ Profile ${profile.name} missing required data for reconnection`);
+      return false;
+    }
+
+    // Check if profile was recently disconnected (last 5 minutes)
+    if (profile.lastDisconnected) {
+      const lastDisconnected = new Date(profile.lastDisconnected);
+      const now = new Date();
+      const diffMinutes = (now.getTime() - lastDisconnected.getTime()) / (1000 * 60);
+      
+      if (diffMinutes < 5) {
+        console.log(`⏳ Profile ${profile.name} was disconnected recently (${diffMinutes.toFixed(1)} minutes ago), skipping reconnection`);
+        return false;
+      }
+    }
+
+    return true;
+  } catch (error) {
+    console.error(`❌ Error checking profile availability for ${profile.name}:`, error);
+    return false;
+  }
+}
+
+export async function autoReconnectWhatsAppProfiles(): Promise<void> {
+  try {
+    console.log('🔄 Auto-reconnect function called...');
     
-    // Connect to database
-    await sequelize.authenticate();
-    console.log('✅ Database connected');
+    // ⚠️ IMPORTANT: Auto-reconnect disabled by default
+    // This prevents bugs with automatic browsers still open
+    console.log('ℹ️ Auto-reconnect disabled by default to prevent bugs');
+    console.log('ℹ️ Profiles must be connected manually by the user');
     
+    // Return without doing anything
+    return;
+    
+    // Commented code below would be used if auto-reconnect was enabled
+    /*
     // Get all connected profiles
     const connectedProfiles = await WhatsAppProfile.findAll({
       where: {
@@ -29,17 +84,38 @@ async function autoReconnectProfiles() {
       }
     });
     
-    console.log(`📋 Found ${connectedProfiles.length} connected profiles to reconnect`);
+    console.log(`📋 Found ${connectedProfiles.length} connected profiles to check`);
     
     if (connectedProfiles.length === 0) {
       console.log('ℹ️ No connected profiles found');
       return;
     }
     
-    // Reconnect each profile
+    // Filter only profiles that really need reconnection
+    const profilesToReconnect = [];
     for (const profile of connectedProfiles) {
+      if (await isProfileAvailable(profile)) {
+        profilesToReconnect.push(profile);
+      }
+    }
+    
+    console.log(`🔄 Attempting to reconnect ${profilesToReconnect.length} profiles out of ${connectedProfiles.length} total`);
+    
+    if (profilesToReconnect.length === 0) {
+      console.log('ℹ️ No profiles need reconnection at this time');
+      return;
+    }
+    
+    // Reconnect each profile
+    for (const profile of profilesToReconnect) {
       try {
         console.log(`🔄 Reconnecting profile: ${profile.name} (ID: ${profile.id})`);
+        
+        // Check again if profile is still available before reconnecting
+        if (!(await isProfileAvailable(profile))) {
+          console.log(`⏭️ Skipping reconnection for profile ${profile.name} - no longer available`);
+          continue;
+        }
         
         // Create WhatsApp client
         const client = new Client({
@@ -89,10 +165,10 @@ async function autoReconnectProfiles() {
         });
         
         // Store client instance
-        activeClients.set(profile.clientId, client);
+        global.activeClients.set(profile.clientId, client);
         
         // Store client data
-        clientData.set(profile.clientId, {
+        global.clientData.set(profile.clientId, {
           profileName: profile.name,
           status: 'connecting',
           profileId: profile.id
@@ -103,11 +179,11 @@ async function autoReconnectProfiles() {
           console.log(`✅ Profile ${profile.name} reconnected successfully!`);
           
           // Update client data
-          const clientInfo = clientData.get(profile.clientId);
+          const clientInfo = global.clientData.get(profile.clientId);
           if (clientInfo) {
             clientInfo.status = 'connected';
             clientInfo.phoneNumber = client.info?.wid?.user;
-            clientData.set(profile.clientId, clientInfo);
+            global.clientData.set(profile.clientId, clientInfo);
           }
           
           // Update profile status
@@ -122,10 +198,10 @@ async function autoReconnectProfiles() {
           console.error(`❌ Error reconnecting profile ${profile.name}:`, error);
           
           // Update client data
-          const clientInfo = clientData.get(profile.clientId);
+          const clientInfo = global.clientData.get(profile.clientId);
           if (clientInfo) {
             clientInfo.status = 'error';
-            clientData.set(profile.clientId, clientInfo);
+            global.clientData.set(profile.clientId, clientInfo);
           }
           
           // Update profile status
@@ -136,17 +212,17 @@ async function autoReconnectProfiles() {
           });
           
           // Remove from active clients
-          activeClients.delete(profile.clientId);
+          global.activeClients.delete(profile.clientId);
         });
         
         client.on('disconnected', async (reason) => {
           console.log(`🔌 Profile ${profile.name} disconnected:`, reason);
           
           // Update client data
-          const clientInfo = clientData.get(profile.clientId);
+          const clientInfo = global.clientData.get(profile.clientId);
           if (clientInfo) {
             clientInfo.status = 'disconnected';
-            clientData.set(profile.clientId, clientInfo);
+            global.clientData.set(profile.clientId, clientInfo);
           }
           
           // Update profile status
@@ -157,7 +233,7 @@ async function autoReconnectProfiles() {
           });
           
           // Remove from active clients
-          activeClients.delete(profile.clientId);
+          global.activeClients.delete(profile.clientId);
         });
         
         // Initialize client
@@ -175,19 +251,18 @@ async function autoReconnectProfiles() {
           isConnected: false,
           lastDisconnected: new Date()
         });
+        
+        // Remove from active clients if it was added
+        global.activeClients.delete(profile.clientId);
       }
     }
     
     console.log('✅ Auto-reconnect process completed');
-    console.log(`📊 Active clients: ${activeClients.size}`);
-    console.log(`📊 Client data entries: ${clientData.size}`);
+    console.log(`📊 Active clients: ${global.activeClients.size}`);
+    console.log(`📊 Client data entries: ${global.clientData.size}`);
+    */
     
   } catch (error) {
     console.error('❌ Error in auto-reconnect process:', error);
-  } finally {
-    await sequelize.close();
   }
-}
-
-// Run the auto-reconnect
-autoReconnectProfiles(); 
+} 

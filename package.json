@@ -59,6 +59,7 @@
     "frontend"
   ],
   "dependencies": {
-    "next-auth": "^4.24.11"
+    "next-auth": "^4.24.11",
+    "sqlite3": "^5.1.7"
   }
 }

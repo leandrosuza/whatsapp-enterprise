@@ -13,7 +13,12 @@
     "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write src/**/*.ts",
     "init-db": "ts-node src/scripts/initDb.ts",
-    "create-admin": "ts-node src/scripts/createAdmin.ts"
+    "create-admin": "ts-node src/scripts/createAdmin.ts",
+    "seed-ddd": "ts-node src/scripts/seedDDDs.ts",
+    "seed-tags": "ts-node src/scripts/seedTags.ts",
+    "add-sharing-fields": "ts-node src/scripts/addSharingFields.ts",
+    "cleanup": "node scripts/cleanup.js",
+    "cleanup-profiles": "ts-node src/scripts/cleanupProfiles.ts"
   },
   "keywords": [
     "whatsapp",
@@ -47,7 +52,8 @@
     "sqlite3": "^5.1.6",
     "uuid": "^9.0.1",
     "whatsapp-web.js": "^1.23.0",
-    "winston": "^3.11.0"
+    "winston": "^3.11.0",
+    "ngrok": "^4.3.3"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

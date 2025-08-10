@@ -11,38 +11,50 @@ import { Server } from 'socket.io';
 dotenv.config();
 
 // Import configurations
-import { connectDatabase } from './config/database';
-import { logger } from './utils/logger';
+import { connectDatabase } from './infrastructure/database/database';
+import { logger } from './infrastructure/utils/logger';
 
 // Import models
-import { initializeAssociations } from './models';
-import sequelize from './models';
+import { initializeAssociations } from './core/entities';
+import sequelize from './core/entities';
 
 // Import routes
-import authRoutes from './routes/auth';
-import userRoutes from './routes/users';
-import whatsappRoutes from './routes/whatsapp';
-import contactRoutes from './routes/contacts';
-import conversationRoutes from './routes/conversations';
-import automationRoutes from './routes/automations';
-import campaignRoutes from './routes/campaigns';
-import aiRoutes from './routes/ai';
-import analyticsRoutes from './routes/analytics';
+import authRoutes from './presentation/routes/auth';
+import userRoutes from './presentation/routes/users';
+import whatsappRoutes from './presentation/routes/whatsapp';
+import contactRoutes from './presentation/routes/contacts';
+import conversationRoutes from './presentation/routes/conversations';
+import automationRoutes from './presentation/routes/automations';
+import campaignRoutes from './presentation/routes/campaigns';
+import aiRoutes from './presentation/routes/ai';
+import analyticsRoutes from './presentation/routes/analytics';
+import dddRoutes from './presentation/routes/ddds';
+import tagRoutes from './presentation/routes/tags';
+import databaseRoutes from './presentation/routes/database';
 
 // Import middleware
-import { errorHandler } from './middleware/errorHandler';
-import { notFound } from './middleware/notFound';
-import { rateLimiter } from './middleware/rateLimiter';
-import { autoReconnectWhatsAppProfiles } from './utils/whatsappAutoReconnect';
-import { resetProfileStatus } from './scripts/resetProfileStatus';
+import { errorHandler } from './infrastructure/middleware/errorHandler';
+import { notFound } from './infrastructure/middleware/notFound';
+import { rateLimiter } from './infrastructure/middleware/rateLimiter';
+import { autoReconnectWhatsAppProfiles } from './infrastructure/utils/whatsappAutoReconnect';
 
 const app = express();
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
     origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-    methods: ['GET', 'POST']
-  }
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
+  pingTimeout: 15000, // Reduced from 30000 to 15000 for better performance
+  pingInterval: 8000, // Reduced from 15000 to 8000 for better performance
+  maxHttpBufferSize: 1e6, // Kept to optimize memory
+  allowEIO3: true,
+  transports: ['websocket'], // WebSocket only for maximum speed
+  upgradeTimeout: 10000, // Reduced to 10 seconds
+  allowUpgrades: true,
+  perMessageDeflate: false, // Disable compression to reduce latency
+  httpCompression: false // Disable HTTP compression to reduce latency
 });
 
 const PORT = process.env.PORT || 3001;
@@ -90,6 +102,127 @@ app.use('/api/automations', automationRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/ddds', dddRoutes);
+app.use('/api/tags', tagRoutes);
+app.use('/api/database', databaseRoutes);
+
+// Shared page route for WhatsApp profiles
+app.get('/shared/:token', async (req, res) => {
+  const { token } = req.params;
+  
+  try {
+    // Import WhatsAppProfile
+    const { default: WhatsAppProfile } = await import('./core/entities/WhatsAppProfile');
+    
+    // Find profile by share token
+    const profile = await WhatsAppProfile.findOne({
+      where: { shareToken: token }
+    });
+    
+    if (!profile) {
+      return res.status(404).send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Perfil Não Encontrado</title>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <script src="https://cdn.tailwindcss.com"></script>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+        </head>
+        <body class="bg-gray-50">
+            <div class="min-h-screen flex items-center justify-center">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-exclamation-triangle text-2xl text-red-600"></i>
+                    </div>
+                    <h2 class="text-xl font-semibold text-gray-800 mb-2">Perfil Não Encontrado</h2>
+                    <p class="text-gray-600 mb-4">O token de compartilhamento não é válido.</p>
+                    <div class="bg-white rounded-lg p-4 shadow-sm max-w-md mx-auto">
+                        <p class="text-sm text-gray-600">
+                            Este link de compartilhamento não existe ou foi removido.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+      `);
+    }
+    
+    // Check if sharing is enabled
+    if (!profile.isShared) {
+      return res.status(403).send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Compartilhamento Desabilitado</title>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <script src="https://cdn.tailwindcss.com"></script>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+        </head>
+        <body class="bg-gray-50">
+            <div class="min-h-screen flex items-center justify-center">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-lock text-2xl text-yellow-600"></i>
+                    </div>
+                    <h2 class="text-xl font-semibold text-gray-800 mb-2">Compartilhamento Desabilitado</h2>
+                    <p class="text-gray-600 mb-4">Perfil: ${profile.name}</p>
+                    <div class="bg-white rounded-lg p-4 shadow-sm max-w-md mx-auto">
+                        <p class="text-sm text-gray-600">
+                            O compartilhamento deste perfil foi desabilitado pelo administrador.
+                        </p>
+                        <div class="mt-4 p-3 bg-yellow-50 rounded-lg">
+                            <p class="text-xs text-yellow-700">
+                                <i class="fas fa-info-circle mr-1"></i>
+                                Entre em contato com o administrador para reativar o compartilhamento.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+      `);
+    }
+    
+    // Redirect to the frontend shared page with the token
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    return res.redirect(`${frontendUrl}/shared/${token}`);
+  } catch (error) {
+    console.error('❌ Error in shared route:', error);
+    return res.status(500).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <title>Erro Interno</title>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <script src="https://cdn.tailwindcss.com"></script>
+          <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+      </head>
+      <body class="bg-gray-50">
+          <div class="min-h-screen flex items-center justify-center">
+              <div class="text-center">
+                  <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <i class="fas fa-exclamation-triangle text-2xl text-red-600"></i>
+                  </div>
+                  <h2 class="text-xl font-semibold text-gray-800 mb-2">Erro Interno</h2>
+                  <p class="text-gray-600 mb-4">Ocorreu um erro ao processar sua solicitação.</p>
+                  <div class="bg-white rounded-lg p-4 shadow-sm max-w-md mx-auto">
+                      <p class="text-sm text-gray-600">
+                          Tente novamente mais tarde ou entre em contato com o suporte.
+                      </p>
+                  </div>
+              </div>
+          </div>
+      </body>
+      </html>
+    `);
+  }
+});
 
 // Socket.IO connection
 io.on('connection', (socket) => {
@@ -105,75 +238,53 @@ io.on('connection', (socket) => {
     logger.info(`Client joined WhatsApp room for profile ${profileId}`);
   });
 
-  // Handler para mensagens de teste do frontend
+  // ULTRA-OPTIMIZED message handler - INSTANT
   socket.on('whatsapp_message', (data) => {
-    logger.info(`📨 Test message received from client: ${socket.id}`, {
-      profileId: data.profileId,
-      chatId: data.data?.chatId,
-      text: data.data?.text?.substring(0, 30)
-    });
-    
-    // Echo da mensagem de volta para o cliente (para testes)
-    socket.emit('whatsapp_message', data);
-    
-    // Se for uma mensagem de teste, também emitir para a sala do WhatsApp
-    if (data.profileId) {
+    // INSTANT processing without unnecessary checks
+    if (data.profileId && data.data?.chatId) {
       const roomName = `whatsapp-${data.profileId}`;
+      
+      // Emit IMMEDIATELY without logging in production
       socket.to(roomName).emit('whatsapp_message', data);
-      logger.info(`📡 Echoed test message to room: ${roomName}`);
+      
+      // Log only in development and only every 10 messages to not impact performance
+      if (process.env.NODE_ENV === 'development' && Math.random() < 0.1) {
+        logger.info(`⚡ INSTANT message processed for room: ${roomName}`);
+      }
     }
   });
 
-  // Handler para marcar mensagens como lidas no WhatsApp real
-  socket.on('markAsRead', async ({ chatId, profileId }) => {
+  // Handler to mark messages as read in real WhatsApp
+  socket.on('mark_as_read', async (data) => {
     try {
-      logger.info(`📖 Marking messages as read: ${chatId} for profile ${profileId}`);
+      const { profileId, chatId, messageIds } = data;
       
+      // Get the WhatsApp client for this profile
       const profile = await WhatsAppProfile.findByPk(profileId);
-      if (!profile) {
-        logger.error(`❌ Profile not found for markAsRead: ${profileId}`);
+      if (!profile || !profile.isConnected) {
+        socket.emit('error', { message: 'Profile not connected' });
         return;
       }
-      
+
+      // Import WhatsApp client
+      const { Client } = require('whatsapp-web.js');
       const client = global.activeClients?.get(profile.clientId);
+      
       if (!client) {
-        logger.error(`❌ Client not found for markAsRead: ${profile.clientId}`);
+        socket.emit('error', { message: 'WhatsApp client not found' });
         return;
       }
-      
-      // Enviar sendSeen para o WhatsApp real
-      await client.sendSeen(chatId);
-      logger.info(`✅ sendSeen sent to WhatsApp for chat: ${chatId}`);
-      
-      // Emitir confirmação para o frontend
-      socket.emit('markAsReadConfirmed', { chatId, profileId });
-      
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      logger.error(`❌ Error marking as read: ${errorMessage}`);
-      socket.emit('markAsReadError', { chatId, profileId, error: errorMessage });
-    }
-  });
 
-  // Handler para indicador de digitação
-  socket.on('typing', async ({ chatId, profileId, isTyping }) => {
-    try {
-      const profile = await WhatsAppProfile.findByPk(profileId);
-      if (!profile) return;
+      // Mark messages as read
+      const chat = await client.getChatById(chatId);
+      await chat.sendSeen();
       
-      const client = global.activeClients?.get(profile.clientId);
-      if (!client) return;
-      
-      if (isTyping) {
-        await client.sendPresenceAvailable();
-        await client.sendStateTyping(chatId);
-      } else {
-        await client.sendStateRecording(chatId);
-      }
+      // Emit success event
+      socket.emit('messages_marked_read', { success: true, chatId });
       
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      logger.error(`❌ Error handling typing indicator: ${errorMessage}`);
+      logger.error('Error marking messages as read:', error);
+      socket.emit('error', { message: 'Failed to mark messages as read' });
     }
   });
 
@@ -189,89 +300,20 @@ declare global {
 global.io = io;
 
 // Import WhatsAppProfile for reconnection
-import WhatsAppProfile from './models/WhatsAppProfile';
+import WhatsAppProfile from './core/entities/WhatsAppProfile';
 
 // Function to reconnect all connected WhatsApp profiles
 async function reconnectConnectedProfiles() {
   try {
     logger.info('🔄 Starting WhatsApp profiles reconnection process...');
     
-    // Get all profiles that should be connected
-    const connectedProfiles = await WhatsAppProfile.findAll({
-      where: {
-        isConnected: true,
-        isActive: true
-      }
-    });
+    // ⚠️ IMPORTANT: Auto-reconnection disabled by default
+    // This prevents bugs with automatic browsers still open
+    logger.info('ℹ️ Auto-reconnection disabled by default to prevent bugs');
+    logger.info('ℹ️ Profiles must be connected manually by the user');
     
-    logger.info(`📱 Found ${connectedProfiles.length} profiles to check`);
-    
-    // Filtrar apenas perfis que realmente precisam de reconexão
-    const profilesToReconnect = [];
-    for (const profile of connectedProfiles) {
-      // Verificar se já existe um cliente ativo para este perfil
-      const existingClient = global.activeClients?.get(profile.clientId);
-      if (existingClient) {
-        // Se já existe um cliente, verificar se está conectado
-        const clientInfo = global.clientData?.get(profile.clientId);
-        if (clientInfo && clientInfo.status === 'connected') {
-          logger.info(`✅ Profile ${profile.name} already connected, skipping reconnection`);
-          continue;
-        }
-      }
-
-      // Verificar se o perfil tem dados válidos para reconexão
-      if (!profile.clientId || !profile.name) {
-        logger.warn(`⚠️ Profile ${profile.name} missing required data for reconnection`);
-        continue;
-      }
-
-      // Verificar se o perfil foi desconectado recentemente (últimos 5 minutos)
-      if (profile.lastDisconnected) {
-        const lastDisconnected = new Date(profile.lastDisconnected);
-        const now = new Date();
-        const diffMinutes = (now.getTime() - lastDisconnected.getTime()) / (1000 * 60);
-        
-        if (diffMinutes < 5) {
-          logger.info(`⏳ Profile ${profile.name} was disconnected recently (${diffMinutes.toFixed(1)} minutes ago), skipping reconnection`);
-          continue;
-        }
-      }
-
-      profilesToReconnect.push(profile);
-    }
-    
-    logger.info(`🔄 Attempting to reconnect ${profilesToReconnect.length} profiles out of ${connectedProfiles.length} total`);
-    
-    if (profilesToReconnect.length === 0) {
-      logger.info('ℹ️ No profiles need reconnection at this time');
-      return;
-    }
-    
-    for (const profile of profilesToReconnect) {
-      try {
-        logger.info(`🔄 Reconnecting profile: ${profile.name} (ID: ${profile.id})`);
-        
-        // Make a request to reconnect the profile
-        const response = await fetch(`http://localhost:${PORT}/api/whatsapp/profiles/${profile.id}/connect`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (response.ok) {
-          logger.info(`✅ Successfully reconnected profile: ${profile.name}`);
-        } else {
-          logger.warn(`⚠️ Failed to reconnect profile: ${profile.name} - Status: ${response.status}`);
-        }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        logger.error(`❌ Error reconnecting profile ${profile.name}: ${errorMessage}`);
-      }
-    }
-    
-    logger.info('✅ WhatsApp profiles reconnection process completed');
+    // Return without doing anything
+    return;
   } catch (error) {
     logger.error('❌ Error in reconnection process:', error);
   }
@@ -296,17 +338,38 @@ async function startServer() {
     await sequelize.sync({ force: false });
     logger.info('✅ Database models synchronized');
 
-    // Reset profile status on startup
-    await resetProfileStatus();
-    logger.info('✅ Profile status reset completed');
+    // 🔧 IMPORTANT: Turn off all profiles when starting the system
+    // This prevents bugs with automatic browsers still open
+    logger.info('🔄 Turning off all WhatsApp profiles when starting the system...');
+    await WhatsAppProfile.update(
+      { 
+        status: 'disconnected',
+        isConnected: false,
+        lastDisconnected: new Date()
+      },
+      { 
+        where: {
+          isConnected: true
+        }
+      }
+    );
+    logger.info('✅ All profiles have been safely turned off');
 
-    // Reconnect all connected WhatsApp profiles
-    await reconnectConnectedProfiles();
-    logger.info('✅ WhatsApp profiles reconnection process completed');
+    // Clear global client data
+    if (global.activeClients) {
+      global.activeClients.clear();
+    }
+    if (global.clientData) {
+      global.clientData.clear();
+    }
+    logger.info('✅ Global client data cleared');
 
-    // Auto-reconnect WhatsApp profiles
-    console.log('🔄 Auto-reconnecting WhatsApp profiles...');
-    await autoReconnectWhatsAppProfiles();
+    // Profile status management initialized
+    logger.info('✅ Profile status management initialized');
+
+    // ❌ REMOVED: Automatic auto-reconnect on startup
+    // Profiles must now be connected manually by the user
+    logger.info('ℹ️ Auto-reconnect disabled - profiles must be connected manually');
 
     // Start server
     server.listen(PORT, () => {
