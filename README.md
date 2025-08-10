@@ -242,7 +242,9 @@ npm run dev
 
 ## 📄 License
 
-MIT License - see the [LICENSE](LICENSE) file for details.
+Custom License - see the [LICENSE](LICENSE) file for details.
+
+**⚠️ Important:** This project is open source for educational and non-commercial use. Commercial use requires explicit written permission from the author. See LICENSE file for full terms and conditions.
 
 **⚠️ Important:** This project is open source for educational and non-commercial use. Commercial use requires explicit written permission from the author. See LICENSE file for full terms and conditions.
 
