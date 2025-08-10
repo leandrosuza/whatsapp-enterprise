@@ -1,0 +1,370 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Global fix for select elements visibility */
+select {
+  color: #374151 !important;
+  background-color: #ffffff !important;
+}
+
+select option {
+  color: #374151 !important;
+  background-color: #ffffff !important;
+}
+
+/* Global fix for input elements visibility */
+input {
+  color: #374151 !important;
+  background-color: #ffffff !important;
+}
+
+input::placeholder {
+  color: #9ca3af !important; /* Gray-400 for better visibility */
+}
+
+input:focus::placeholder {
+  color: #d1d5db !important; /* Gray-300 when focused */
+}
+
+/* Specific styling for input fields */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="tel"],
+input[type="url"],
+input[type="search"] {
+  color: #374151 !important;
+  background-color: #ffffff !important;
+  border: 1px solid #d1d5db !important;
+}
+
+input[type="text"]::placeholder,
+input[type="email"]::placeholder,
+input[type="password"]::placeholder,
+input[type="number"]::placeholder,
+input[type="tel"]::placeholder,
+input[type="url"]::placeholder,
+input[type="search"]::placeholder {
+  color: #9ca3af !important;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+input[type="tel"]:focus,
+input[type="url"]:focus,
+input[type="search"]:focus {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1) !important;
+}
+
+/* WhatsApp Enterprise Admin Styles */
+.whatsapp-gradient {
+  background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+}
+
+/* ===== DESIGN SYSTEM - COLOR PALETTE ===== */
+
+/* Primary Colors */
+:root {
+  --primary-green: #25D366;
+  --primary-dark-green: #128C7E;
+  --primary-light-green: #4ade80;
+  
+  /* Neutral Colors */
+  --neutral-50: #f9fafb;
+  --neutral-100: #f3f4f6;
+  --neutral-200: #e5e7eb;
+  --neutral-300: #d1d5db;
+  --neutral-400: #9ca3af;
+  --neutral-500: #6b7280;
+  --neutral-600: #4b5563;
+  --neutral-700: #374151;
+  --neutral-800: #1f2937;
+  --neutral-900: #111827;
+  
+  /* Semantic Colors */
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #3b82f6;
+  
+  /* Background Colors */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --bg-sidebar: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+  --bg-header: #ffffff;
+  
+  /* Text Colors */
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --text-tertiary: #6b7280;
+  --text-muted: #9ca3af;
+  --text-white: #ffffff;
+}
+
+/* ===== ENHANCED COLOR SYSTEM ===== */
+
+/* Fix for white text on white background issues */
+.bg-white .text-white:not(.btn-primary):not(.btn-secondary):not(.badge):not(.notification-badge):not(.whatsapp-gradient *):not(.sidebar *):not(.header *) {
+  color: var(--text-secondary) !important;
+}
+
+.bg-gray-50 .text-white:not(.btn-primary):not(.btn-secondary):not(.badge):not(.notification-badge):not(.whatsapp-gradient *):not(.sidebar *):not(.header *) {
+  color: var(--text-secondary) !important;
+}
+
+.bg-gray-100 .text-white:not(.btn-primary):not(.btn-secondary):not(.badge):not(.notification-badge):not(.whatsapp-gradient *):not(.sidebar *):not(.header *) {
+  color: var(--text-secondary) !important;
+}
+
+/* Enhanced Text Hierarchy */
+.text-heading {
+  color: var(--text-primary) !important;
+  font-weight: 600;
+}
+
+.text-body {
+  color: var(--text-secondary) !important;
+}
+
+.text-caption {
+  color: var(--text-tertiary) !important;
+  font-size: 0.875rem;
+}
+
+.text-muted {
+  color: var(--text-muted) !important;
+}
+
+/* Enhanced Card System */
+.card-enhanced {
+  background: var(--bg-primary);
+  border: 1px solid var(--neutral-200);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.card-enhanced:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
+}
+
+/* Enhanced Button System */
+.btn-primary-enhanced {
+  background: linear-gradient(135deg, var(--primary-green) 0%, var(--primary-dark-green) 100%);
+  color: var(--text-white);
+  border: none;
+  border-radius: 8px;
+  padding: 0.75rem 1.5rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(37, 211, 102, 0.2);
+}
+
+.btn-primary-enhanced:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(37, 211, 102, 0.3);
+}
+
+.btn-secondary-enhanced {
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--neutral-300);
+  border-radius: 8px;
+  padding: 0.75rem 1.5rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.btn-secondary-enhanced:hover {
+  background: var(--neutral-50);
+  border-color: var(--neutral-400);
+  transform: translateY(-1px);
+}
+
+/* Enhanced Icon System */
+.icon-primary {
+  color: var(--primary-green);
+}
+
+.icon-secondary {
+  color: var(--text-tertiary);
+}
+
+.icon-success {
+  color: var(--success);
+}
+
+.icon-warning {
+  color: var(--warning);
+}
+
+.icon-error {
+  color: var(--error);
+}
+
+.icon-info {
+  color: var(--info);
+}
+
+/* Specific fixes for common problematic elements */
+.stats-value {
+  color: var(--text-primary) !important;
+  font-weight: 700;
+}
+
+.stats-label {
+  color: var(--text-tertiary) !important;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* Fix for modal content */
+.modal-content .text-white:not(.whatsapp-gradient *):not(.btn-primary):not(.btn-secondary) {
+  color: var(--text-secondary) !important;
+}
+
+/* Fix for card content */
+.card-shadow .text-white:not(.whatsapp-gradient *):not(.btn-primary):not(.btn-secondary) {
+  color: var(--text-secondary) !important;
+}
+
+.btn-primary {
+  @apply bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200;
+}
+
+.btn-secondary {
+  @apply bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg transition-colors duration-200;
+}
+
+.input-enhanced {
+  @apply border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200;
+}
+
+/* Animation classes */
+.floating {
+  animation: float 6s ease-in-out infinite;
+}
+
+.floating-delay-1 {
+  animation: float 6s ease-in-out infinite 1s;
+}
+
+.floating-delay-2 {
+  animation: float 6s ease-in-out infinite 2s;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+.icon-bounce {
+  animation: bounce 2s infinite;
+}
+
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-10px);
+  }
+  60% {
+    transform: translateY(-5px);
+  }
+}
+
+
+
+.text-glow {
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+}
+
+.border-glow {
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+}
+
+.logo-glow {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+
+.ripple:active::after {
+  width: 300px;
+  height: 300px;
+}
+
+.plan-card {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Scrollbar styles */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
