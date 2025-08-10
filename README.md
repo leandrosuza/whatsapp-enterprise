@@ -6,7 +6,7 @@
 
 A modern web platform that transforms WhatsApp into a powerful business tool, offering automation, artificial intelligence, and a complete administrative interface.
 
-[![License: Custom](https://img.shields.io/badge/License-Custom-red.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue.svg)](https://www.typescriptlang.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black.svg)](https://nextjs.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18-green.svg)](https://nodejs.org/)
@@ -40,7 +40,7 @@ A modern web platform that transforms WhatsApp into a powerful business tool, of
 
 ## ✨ Available Features
 
-### ✅ Implemented (v2.1.0)
+### ✅ Implemented (v1.0.0)
 
 #### 🔐 Authentication System
 - Secure JWT login
@@ -112,10 +112,11 @@ A modern web platform that transforms WhatsApp into a powerful business tool, of
 ### Frontend
 - **Next.js 15** - React framework with SSR
 - **TypeScript** - Static typing
-- **Tailwind CSS** - Utility CSS framework
+- **Tailwind CSS 4** - Utility CSS framework
 - **Socket.IO Client** - Real-time communication
-- **React Query** - Data fetching and caching
+- **@tanstack/react-query** - Data fetching and caching
 - **Zustand** - State management
+- **NextAuth.js** - Authentication
 
 ### Backend
 - **Node.js** - JavaScript runtime
@@ -126,7 +127,7 @@ A modern web platform that transforms WhatsApp into a powerful business tool, of
 - **Sequelize** - ORM
 
 ### WhatsApp Integration
-- **whatsapp-web.js** -  WhatsApp-web.js library
+- **whatsapp-web.js** - WhatsApp Web.js library
 - **Puppeteer** - Browser automation
 
 ### Authentication & Security
@@ -150,11 +151,10 @@ git clone https://github.com/leandrosuza/whatsapp-enterprise.git
 cd whatsapp-enterprise
 
 # Install dependencies
-npm install
+npm run install:all
 
 # Setup environment
-cp backend/env.example backend/.env
-cp frontend/env.local.example frontend/.env.local
+npm run setup:env
 
 # Create admin user
 cd backend && npm run create-admin
